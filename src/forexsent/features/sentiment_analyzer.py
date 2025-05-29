@@ -15,11 +15,11 @@ from tqdm import tqdm
 import argparse
 
 # Configuration constants
-PROCESSED_DATA_DIR = "data/processed"
-RAW_DATA_DIR = "data/raw"
-CLEANED_ARTICLES_FILE = "data/processed/gdelt_articles_text_cleaned.csv"
-FOREX_PRICE_FILE = "data/raw/eurusd_daily.csv"
-FINAL_SENTIMENT_FILE = "data/processed/gdelt_eurusd_with_sentiment.csv"
+PROCESSED_DATA_DIR = "../../../data/processed"
+RAW_DATA_DIR = "../../../data/raw"
+CLEANED_ARTICLES_FILE = "../../../data/processed/gdelt_articles_text_cleaned.csv"
+FOREX_PRICE_FILE = "../../../data/raw/eurusd_daily.csv"
+FINAL_SENTIMENT_FILE = "../../../data/processed/gdelt_eurusd_with_sentiment.csv"
 FINBERT_MODEL_NAME = "ProsusAI/finbert"
 MAX_SEQUENCE_LENGTH = 512
 SENTIMENT_BATCH_SIZE = 16

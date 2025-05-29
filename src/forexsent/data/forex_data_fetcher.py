@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 
 # Configuration constants
 ALPHAVANTAGE_BASE_URL = "https://www.alphavantage.co/query"
-RAW_DATA_DIR = "data/raw"
+RAW_DATA_DIR = "../../../data/raw"
 REQUEST_TIMEOUT_SECONDS = 30
 RATE_LIMIT_DELAY_SECONDS = 12  # For Alpha Vantage 5 req/min limit
 DEFAULT_FOREX_PAIRS = ["EUR/USD"]

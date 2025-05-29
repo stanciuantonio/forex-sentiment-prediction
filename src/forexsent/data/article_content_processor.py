@@ -18,7 +18,7 @@ from bs4 import BeautifulSoup
 from newspaper import Article
 
 # Configuration constants
-PROCESSED_DATA_DIR = "data/processed"
+PROCESSED_DATA_DIR = "../../../data/processed"
 MAX_PARALLEL_WORKERS =8
 ARTICLE_PROCESSING_BATCH_SIZE = 10
 REQUEST_TIMEOUT_SECONDS = 10

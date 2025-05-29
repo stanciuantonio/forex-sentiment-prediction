@@ -11,9 +11,9 @@ import os
 from pathlib import Path
 
 # Configuration constants
-PROCESSED_DATA_DIR = "data/processed"
-ARTICLES_TEXT_FILE = "data/processed/gdelt_articles_text.csv"
-CLEANED_ARTICLES_FILE = "data/processed/gdelt_articles_text_cleaned.csv"
+PROCESSED_DATA_DIR = "../../../data/processed"
+ARTICLES_TEXT_FILE = "../../../data/processed/gdelt_articles_text.csv"
+CLEANED_ARTICLES_FILE = "../../../data/processed/gdelt_articles_text_cleaned.csv"
 FINAL_COLUMNS = ["date", "url", "title", "text"]
 
 def clean_and_process_gdelt_articles(input_path: str, output_path: str):

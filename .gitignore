@@ -34,13 +34,6 @@ ENV/
 env/
 .env
 
-# Data files (large datasets)
-data/raw/*.csv
-data/processed/*.csv
-data/news/*.csv
-data/test/*.csv
-*.csv
-
 # Model files and weights
 models/
 *.pkl
@@ -118,7 +111,3 @@ node_modules/
 *.tmp
 *.temp
 
-# API keys and secrets
-secrets.json
-credentials.json
-api_keys.txt

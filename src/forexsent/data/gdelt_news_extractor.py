@@ -19,7 +19,7 @@ import concurrent.futures
 from tqdm import tqdm
 
 # Configuration constants
-RAW_DATA_DIR = "data/raw"
+RAW_DATA_DIR = "../../../data/raw"
 GDELT_TABLE_NAME = "gkg"
 MAX_ARTICLES_PER_DAY = 5
 MAX_PARALLEL_WORKERS = 8
