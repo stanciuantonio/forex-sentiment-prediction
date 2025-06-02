@@ -11,3 +11,4 @@ newspaper3k>=0.2.8
 gdelt>=0.1.10
 python-dateutil>=2.8.0
 scikit-learn>=1.0.0
+xgboost>=1.5.0
