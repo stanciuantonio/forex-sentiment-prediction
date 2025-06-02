@@ -34,14 +34,6 @@ ENV/
 env/
 .env
 
-# Model files and weights
-models/
-*.pkl
-*.model
-*.h5
-*.pt
-*.pth
-
 # Jupyter Notebook
 .ipynb_checkpoints
 
