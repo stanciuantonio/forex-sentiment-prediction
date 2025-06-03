@@ -8,6 +8,20 @@ As a baseline, we will train Gaussian Process Regression and XGBoost models (as 
 
 We chose to focus on Forex markets due to their high liquidity and 24/5 operation, which provide a robust environment for time-series modeling. By integrating price action with sentiment data derived from a broad source like GDELT, and employing deep learning models alongside classical benchmarks, this project seeks to determine if sentiment information significantly enhances price prediction accuracy. This approach aims to provide a clear, research-backed methodology for testing our hypotheses on real-world market data.
 
+## Table of Contents
+
+- [Setup and Installation](#setup-and-installation)
+- [Running the Code](#running-the-code)
+  - [Data Acquisition and Initial Processing](#1--data-acquisition-and-initial-processing-output-to-dataraw-and-datainterim)
+  - [Sentiment Analysis](#2--sentiment-analysis-output-to-datainterim-or-dataprocessed)
+  - [Final Feature Engineering](#3--final-feature-engineering-output-to-dataprocessedeurusd_final_processedcsv)
+  - [Model Training](#4--model-training)
+  - [Model Evaluation](#5--model-evaluation)
+- [Project Structure](#project-structure)
+- [Loading Model Weights](#loading-model-weights)
+- [Contributing](#contributing)
+- [License](#license)
+
 ## Setup and Installation
 
 1.  **Clone the repository:**
@@ -72,31 +86,37 @@ The primary dataset for modeling, `data/processed/eurusd_final_processed.csv`, i
       ```
 
       Common arguments:
-      `--data_path`: Path to the input CSV data (default: `../../data/processed/eurusd_final_processed.csv`).
-      `--model_save_path`: Path to save the trained model (default: `../../results/models/lstm_model.h5`).
-      `--epochs`: Number of training epochs (default: 100).
-      `--batch_size`: Batch size (default: 32).
-      `--learning_rate`: Initial learning rate (default: 0.001).
-      `--hidden_size`: LSTM hidden layer size (default: 64).
-      `--num_layers`: Number of LSTM layers (default: 2).
-      `--dropout_rate`: Dropout rate (default: 0.2).
-      `--window_size`: Lookback window for sequences (default: 30).
-      `--early_stopping_patience`: Patience for early stopping (default: 15).
+
+      - `--data_path`: Path to the input CSV data (default: `data/processed/eurusd_final_processed.csv`).
+      - `--model_save_path`: Path to save the trained model (default: `results/models/lstm_model.h5`).
+      - `--epochs`: Number of training epochs (default: 100).
+      - `--batch_size`: Batch size (default: 32).
+      - `--learning_rate`: Initial learning rate (default: 0.001).
+      - `--hidden_size`: LSTM hidden layer size (default: 64).
+      - `--num_layers`: Number of LSTM layers (default: 2).
+      - `--dropout_rate`: Dropout rate (default: 0.2).
+      - `--window_size`: Lookback window for sequences (default: 30).
+      - `--early_stopping_patience`: Patience for early stopping (default: 15).
+
       Run `python src/models/lstm.py --help` for a full list of options.
 
     - **Baseline Models (XGBoost):**
       To train the XGBoost baseline model, run `src/models/baseline.py`. You can customize hyperparameters. For example:
+
       ```bash
       python src/models/baseline.py --n_estimators 150 --max_depth 8 --learning_rate 0.05
       ```
+
       Common arguments:
-      `--data_path`: Path to the input CSV data (default: `../../data/processed/eurusd_final_processed.csv`).
-      `--model_save_path`: Path to save the trained model (default: `../../results/models/xgboost_baseline.joblib`).
-      `--window_size`: Lookback window for features (default: 30).
-      `--max_depth`: Maximum tree depth for XGBoost (default: 6).
-      `--learning_rate`: Learning rate for XGBoost (default: 0.1).
-      `--n_estimators`: Number of trees (boosting rounds) for XGBoost (default: 100).
-      `--random_state`: Random state for reproducibility (default: 42).
+
+      - `--data_path`: Path to the input CSV data (default: `data/processed/eurusd_final_processed.csv`).
+      - `--model_save_path`: Path to save the trained model (default: `results/models/xgboost_baseline.joblib`).
+      - `--window_size`: Lookback window for features (default: 30).
+      - `--max_depth`: Maximum tree depth for XGBoost (default: 6).
+      - `--learning_rate`: Learning rate for XGBoost (default: 0.1).
+      - `--n_estimators`: Number of trees (boosting rounds) for XGBoost (default: 100).
+      - `--random_state`: Random state for reproducibility (default: 42).
+
       Run `python src/models/baseline.py --help` for a full list of options.
 
     _Trained models should ideally be saved to the `results/models/` directory. Specify any command-line arguments for model configuration if applicable (e.g., epochs, learning rate)._
@@ -175,43 +195,32 @@ The project is organized as follows:
 
 ## Loading Model Weights
 
-_TODO: If you are providing pre-trained model weights (e.g., in `results/models/`), describe them here. Specify:_
+The training scripts `src/models/lstm.py` and `src/models/baseline.py` save the trained models to the `results/models/` directory by default:
 
-- _Which models have pre-trained weights available (e.g., LSTM, XGBoost from baseline)._
-- _The exact filenames of the weight files (e.g., `lstm_model_final.h5`, `xgboost_baseline.pkl`)._
-- _Provide a clear code snippet demonstrating how to load these specific weights and use the model for inference._
+- **LSTM Model:** Saved as `results/models/lstm_model.h5`.
+- **XGBoost Model:** Saved as `results/models/xgboost_baseline.joblib`.
 
-Example (modify according to your actual model and libraries):
+You can find these files in `results/models/` after running the respective training scripts.
 
-```python
-# from tensorflow.keras.models import load_model # For LSTM
-# import joblib # For scikit-learn models like XGBoost
-#
-# # Load LSTM model
-# lstm_model_path = 'results/models/your_lstm_model_name.h5'
-# lstm_model = load_model(lstm_model_path)
-#
-# # Load XGBoost model
-# xgboost_model_path = 'results/models/your_xgboost_model.pkl'
-# xgboost_model = joblib.load(xgboost_model_path)
-#
-# # ... code to prepare input data (X_new) ...
-# lstm_predictions = lstm_model.predict(X_new)
-# xgboost_predictions = xgboost_model.predict(X_new)
-# print("LSTM Predictions:", lstm_predictions)
-# print("XGBoost Predictions:", xgboost_predictions)
-```
+These models can be loaded and used for evaluation (or prediction) using the `src/evaluation/evaluate_model.py` script. Please refer to the ["Model Evaluation"](#5--model-evaluation) section for instructions on how to run this script.
 
-_If you are not providing pre-trained weights, you can state that models need to be trained by following the "Model Training" steps._
+If you intend to load these models manually in your own scripts:
 
-## Contributing
+- **For the LSTM model (`lstm_model.h5`):** Ensure you instantiate the model with the same architecture parameters (hidden size, number of layers, dropout rate) that were used during its training. The `evaluate_model.py` script accepts these parameters as command-line arguments (`--lstm_hidden_size`, `--lstm_num_layers`, `--lstm_dropout_rate`) to correctly load the model.
 
-(Optional) If you are open to contributions, outline your guidelines here. For example:
+  ```python
+  from tensorflow.keras.models import load_model
+  # Example:
+  # lstm_model = load_model('results/models/lstm_model.h5')
+  # Ensure your data preprocessing matches that used in training/evaluation.
+  ```
 
-- How to report bugs.
-- How to propose new features.
-- Coding standards or style guides.
+- **For the XGBoost model (`xgboost_baseline.joblib`):**
+  ```python
+  import joblib
+  # Example:
+  # xgboost_model = joblib.load('results/models/xgboost_baseline.joblib')
+  # Ensure your data preprocessing matches that used in training/evaluation.
+  ```
 
-## License
-
-(Optional) Specify the license for your project (e.g., MIT, Apache 2.0). If you don't have one, you might consider adding one.
+If these model files are not present, you will need to train them first by following the steps in the ["Model Training"](#4--model-training) section.
