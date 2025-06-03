@@ -11,8 +11,8 @@ import os
 import argparse
 
 # Define constants for default values
-DEFAULT_DATA_PATH = '../../data/processed/eurusd_final_processed.csv'
-DEFAULT_MODEL_SAVE_PATH = '../../results/models/lstm_model.h5'
+DEFAULT_DATA_PATH = 'data/processed/eurusd_final_processed.csv'
+DEFAULT_MODEL_SAVE_PATH = 'results/models/lstm_model.h5'
 DEFAULT_EPOCHS = 100 # Reduced default for quicker runs, can be overridden
 DEFAULT_BATCH_SIZE = 32
 DEFAULT_LEARNING_RATE = 0.001

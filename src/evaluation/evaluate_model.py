@@ -16,10 +16,10 @@ import seaborn as sns
 # Assuming lstm.py is in ../models relative to this script
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '../models'))
-from lstm import LSTMModel # This imports the class definition
+from lstm import LSTMModel, DEFAULT_HIDDEN_SIZE as LSTM_DEFAULT_HIDDEN_SIZE, DEFAULT_NUM_LAYERS as LSTM_DEFAULT_NUM_LAYERS, DEFAULT_DROPOUT as LSTM_DEFAULT_DROPOUT # Import defaults
 
-DEFAULT_DATA_PATH = '../../data/processed/eurusd_final_processed.csv'
-DEFAULT_REPORTS_DIR = '../../results/reports'
+DEFAULT_DATA_PATH = 'data/processed/eurusd_final_processed.csv'
+DEFAULT_REPORTS_DIR = 'results/reports'
 DEFAULT_WINDOW_SIZE = 30 # Should match the window size used during training for LSTM
 
 def plot_confusion_matrix(y_true, y_pred, labels, model_name, save_path):
@@ -43,7 +43,7 @@ def plot_classification_report(report_dict, model_name, save_path):
     plt.close()
     print(f"Classification report plot saved to {save_path}")
 
-def evaluate_model(model_path, model_type, data_path, reports_dir, window_size):
+def evaluate_model(model_path, model_type, data_path, reports_dir, window_size, lstm_hidden_size, lstm_num_layers, lstm_dropout_rate):
     os.makedirs(reports_dir, exist_ok=True)
 
     # Load data
@@ -115,9 +115,15 @@ def evaluate_model(model_path, model_type, data_path, reports_dir, window_size):
         # Load LSTM model
         # Determine input_size, hidden_size, num_layers, num_classes from saved model or script defaults
         # This is a simplification; a more robust way is to save model config with the model
-        model = LSTMModel(input_size=X_eval_tensor.shape[-1], num_classes=len(class_names)) # Use defaults from lstm.py for hidden_size, num_layers for now
+        model = LSTMModel(
+            input_size=X_eval_tensor.shape[-1],
+            num_classes=len(class_names),
+            hidden_size=lstm_hidden_size,      # Use passed argument
+            num_layers=lstm_num_layers,        # Use passed argument
+            dropout_rate=lstm_dropout_rate     # Use passed argument
+        )
         try:
-            model.load_state_dict(torch.load(model_path))
+            model.load_state_dict(torch.load(model_path, map_location=torch.device('cpu'))) # Added map_location for CPU loading
         except FileNotFoundError:
             print(f"Error: LSTM model file not found at {model_path}")
             return
@@ -214,6 +220,10 @@ if __name__ == "__main__":
     parser.add_argument('--data_path', type=str, default=DEFAULT_DATA_PATH, help=f'Path to the evaluation data CSV file (default: {DEFAULT_DATA_PATH})')
     parser.add_argument('--reports_dir', type=str, default=DEFAULT_REPORTS_DIR, help=f'Directory to save evaluation reports and plots (default: {DEFAULT_REPORTS_DIR})')
     parser.add_argument('--window_size', type=int, default=DEFAULT_WINDOW_SIZE, help=f'Lookback window size used during training (default: {DEFAULT_WINDOW_SIZE})')
+    # LSTM-specific architecture arguments
+    parser.add_argument('--lstm_hidden_size', type=int, default=LSTM_DEFAULT_HIDDEN_SIZE, help='Hidden size of LSTM layers (used if model_type is lstm)')
+    parser.add_argument('--lstm_num_layers', type=int, default=LSTM_DEFAULT_NUM_LAYERS, help='Number of LSTM layers (used if model_type is lstm)')
+    parser.add_argument('--lstm_dropout_rate', type=float, default=LSTM_DEFAULT_DROPOUT, help='Dropout rate for LSTM (used if model_type is lstm)')
 
     args = parser.parse_args()
 
@@ -222,5 +232,8 @@ if __name__ == "__main__":
         model_type=args.model_type,
         data_path=args.data_path,
         reports_dir=args.reports_dir,
-        window_size=args.window_size
+        window_size=args.window_size,
+        lstm_hidden_size=args.lstm_hidden_size,
+        lstm_num_layers=args.lstm_num_layers,
+        lstm_dropout_rate=args.lstm_dropout_rate
     )

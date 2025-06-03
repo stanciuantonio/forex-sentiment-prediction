@@ -11,8 +11,8 @@ import os
 import argparse
 
 # Define constants for default values
-DEFAULT_DATA_PATH = '../../data/processed/eurusd_final_processed.csv'
-DEFAULT_MODEL_SAVE_PATH = '../../results/models/xgboost_baseline.joblib'
+DEFAULT_DATA_PATH = 'data/processed/eurusd_final_processed.csv'
+DEFAULT_MODEL_SAVE_PATH = 'results/models/xgboost_baseline.joblib'
 DEFAULT_WINDOW_SIZE = 30
 DEFAULT_MAX_DEPTH = 6
 DEFAULT_LEARNING_RATE = 0.1

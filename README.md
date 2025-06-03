@@ -107,9 +107,10 @@ The primary dataset for modeling, `data/processed/eurusd_final_processed.csv`, i
     **Example Usage:**
 
     - **Evaluate a trained LSTM model:**
+      Make sure to provide the same LSTM architecture parameters that were used during training.
 
       ```bash
-      python src/evaluation/evaluate_model.py --model_type lstm --model_path results/models/lstm_model.h5 --data_path data/processed/eurusd_final_processed.csv --reports_dir results/reports
+      python src/evaluation/evaluate_model.py --model_type lstm --model_path results/models/lstm_model.h5 --lstm_hidden_size 128 --lstm_num_layers 3 --lstm_dropout_rate 0.3
       ```
 
     - **Evaluate a trained XGBoost model:**
@@ -121,9 +122,12 @@ The primary dataset for modeling, `data/processed/eurusd_final_processed.csv`, i
 
     - `--model_path` (required): Path to the trained model file (`.h5` for LSTM, `.joblib` for XGBoost).
     - `--model_type` (required): Type of the model, either `lstm` or `xgboost`.
-    - `--data_path`: Path to the evaluation data CSV file (default: `../../data/processed/eurusd_final_processed.csv`).
-    - `--reports_dir`: Directory to save evaluation reports and plots (default: `../../results/reports`).
-    - `--window_size`: Lookback window size used during training (default: 30, primarily for LSTM data prep).
+    - `--data_path`: Path to the evaluation data CSV file (default: `data/processed/eurusd_final_processed.csv`).
+    - `--reports_dir`: Directory to save evaluation reports and plots (default: `results/reports`).
+    - `--window_size`: Lookback window size used during training (default: 30).
+    - `--lstm_hidden_size`: Hidden size of LSTM layers (default: 64, from `lstm.py`). **Required if `model_type` is `lstm` and non-default was used for training.**
+    - `--lstm_num_layers`: Number of LSTM layers (default: 2, from `lstm.py`). **Required if `model_type` is `lstm` and non-default was used for training.**
+    - `--lstm_dropout_rate`: Dropout rate for LSTM (default: 0.2, from `lstm.py`). **Required if `model_type` is `lstm` and non-default was used for training.**
 
     **Outputs:**
     The script will print accuracy and a classification report to the console. It will also save the following files to the specified `--reports_dir` (e.g., `results/reports/`):
