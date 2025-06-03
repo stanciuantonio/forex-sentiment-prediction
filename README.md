@@ -4,7 +4,7 @@ Our project aims to build a hybrid pipeline that merges historical price data wi
 
 In parallel, we leverage the GDELT dataset as our primary source for news articles relevant to Forex markets. A dedicated pipeline extracts and filters these articles, aiming for a manageable number per day (e.g., 1-3) by relevance and tone. Each relevant news item's content is then processed using FinBERT, a pre-trained language model specialized in financial text, to obtain a continuous sentiment score. These individual sentiment scores are aggregated daily (e.g., by averaging) to create a daily sentiment time series that aligns with the price data.
 
-As a baseline, we will train Gaussian Process Regression and XGBoost models (as initially planned, and potentially implemented in `src/models/baseline.py`) on this combined feature set using scikit-learn's TimeSeriesSplit for rolling-window cross-validation. We will then train an LSTM (Long Short-Term Memory) network (implemented in `src/models/lstm.py`). The model will use 30-day lookback windows, incorporating both historical price-derived features (like log-returns) and the daily sentiment scores as inputs. For training, each day will be labeled based on a threshold method applied to the next-day log-return (e.g., > +0.2% for BUY, < -0.2% for SELL, otherwise HOLD), a technique supported by financial literature. Rigorous backtesting and reporting of cumulative profit metrics will be conducted throughout the project to ensure the reproducibility and academic validity of our findings.
+As a baseline, we will train XGBoost model (as initially planned, and potentially implemented in `src/models/baseline.py`) on this combined feature set using scikit-learn's TimeSeriesSplit for rolling-window cross-validation. We will then train an LSTM (Long Short-Term Memory) network (implemented in `src/models/lstm.py`). The model will use 30-day lookback windows, incorporating both historical price-derived features (like log-returns) and the daily sentiment scores as inputs. For training, each day will be labeled based on a threshold method applied to the next-day log-return (e.g., > +0.2% for BUY, < -0.2% for SELL, otherwise HOLD), a technique supported by financial literature. Rigorous backtesting and reporting of cumulative profit metrics will be conducted throughout the project to ensure the reproducibility and academic validity of our findings.
 
 We chose to focus on Forex markets due to their high liquidity and 24/5 operation, which provide a robust environment for time-series modeling. By integrating price action with sentiment data derived from a broad source like GDELT, and employing deep learning models alongside classical benchmarks, this project seeks to determine if sentiment information significantly enhances price prediction accuracy. This approach aims to provide a clear, research-backed methodology for testing our hypotheses on real-world market data.
 
@@ -195,32 +195,43 @@ The project is organized as follows:
 
 ## Loading Model Weights
 
-The training scripts `src/models/lstm.py` and `src/models/baseline.py` save the trained models to the `results/models/` directory by default:
+_TODO: If you are providing pre-trained model weights (e.g., in `results/models/`), describe them here. Specify:_
 
-- **LSTM Model:** Saved as `results/models/lstm_model.h5`.
-- **XGBoost Model:** Saved as `results/models/xgboost_baseline.joblib`.
+- _Which models have pre-trained weights available (e.g., LSTM, XGBoost from baseline)._
+- _The exact filenames of the weight files (e.g., `lstm_model_final.h5`, `xgboost_baseline.pkl`)._
+- _Provide a clear code snippet demonstrating how to load these specific weights and use the model for inference._
 
-You can find these files in `results/models/` after running the respective training scripts.
+Example (modify according to your actual model and libraries):
 
-These models can be loaded and used for evaluation (or prediction) using the `src/evaluation/evaluate_model.py` script. Please refer to the ["Model Evaluation"](#5--model-evaluation) section for instructions on how to run this script.
+```python
+# from tensorflow.keras.models import load_model # For LSTM
+# import joblib # For scikit-learn models like XGBoost
+#
+# # Load LSTM model
+# lstm_model_path = 'results/models/your_lstm_model_name.h5'
+# lstm_model = load_model(lstm_model_path)
+#
+# # Load XGBoost model
+# xgboost_model_path = 'results/models/your_xgboost_model.pkl'
+# xgboost_model = joblib.load(xgboost_model_path)
+#
+# # ... code to prepare input data (X_new) ...
+# lstm_predictions = lstm_model.predict(X_new)
+# xgboost_predictions = xgboost_model.predict(X_new)
+# print("LSTM Predictions:", lstm_predictions)
+# print("XGBoost Predictions:", xgboost_predictions)
+```
 
-If you intend to load these models manually in your own scripts:
+_If you are not providing pre-trained weights, you can state that models need to be trained by following the "Model Training" steps._
 
-- **For the LSTM model (`lstm_model.h5`):** Ensure you instantiate the model with the same architecture parameters (hidden size, number of layers, dropout rate) that were used during its training. The `evaluate_model.py` script accepts these parameters as command-line arguments (`--lstm_hidden_size`, `--lstm_num_layers`, `--lstm_dropout_rate`) to correctly load the model.
+## Contributing
 
-  ```python
-  from tensorflow.keras.models import load_model
-  # Example:
-  # lstm_model = load_model('results/models/lstm_model.h5')
-  # Ensure your data preprocessing matches that used in training/evaluation.
-  ```
+(Optional) If you are open to contributions, outline your guidelines here. For example:
 
-- **For the XGBoost model (`xgboost_baseline.joblib`):**
-  ```python
-  import joblib
-  # Example:
-  # xgboost_model = joblib.load('results/models/xgboost_baseline.joblib')
-  # Ensure your data preprocessing matches that used in training/evaluation.
-  ```
+- How to report bugs.
+- How to propose new features.
+- Coding standards or style guides.
 
-If these model files are not present, you will need to train them first by following the steps in the ["Model Training"](#4--model-training) section.
+## License
+
+(Optional) Specify the license for your project (e.g., MIT, Apache 2.0). If you don't have one, you might consider adding one.
