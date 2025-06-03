@@ -18,11 +18,21 @@ def process_final_dataset():
     # Calculate log_return
     df['log_return'] = np.log(df['close'] / df['close'].shift(1))
 
+    # Moving Averages
+    df['ma_5'] = df['close'].rolling(window=5).mean()
+    df['ma_10'] = df['close'].rolling(window=10).mean()
+
+    # Momentum: current close - close 5 periods ago
+    df['momentum_5'] = df['close'] - df['close'].shift(5)
+
+    # Volatility: rolling standard deviation of log returns
+    df['volatility_5'] = df['log_return'].rolling(window=5).std()
+
     # Calculate fwd_return (for labels)
     df['fwd_return'] = np.log(df['close'].shift(-1) / df['close'])
 
     # Create BUY/SELL/HOLD labels
-    THRESH = 0.002  # 0.2%
+    THRESH = 0.002  # 0.3%
     conditions = [
         df['fwd_return'] > THRESH,   # BUY = 1
         df['fwd_return'] < -THRESH   # SELL = -1
