@@ -170,7 +170,8 @@ The primary dataset for modeling, `data/processed/eurusd_final_processed.csv`, i
 
     - A text file with classification metrics (e.g., `classification_metrics_lstm.txt`).
     - A PNG image of the confusion matrix (e.g., `confusion_matrix_lstm.png`).
-    - A PNG image of the classification report heatmap (e.g., `classification_report_lstm.png`).
+    - A PNG image of the classification report heatmap (focusing on per-class precision, recall, F1-score) (e.g., `classification_report_lstm.png`).
+    - A PNG image of a bar chart summarizing overall accuracy, macro average, and weighted average metrics (e.g., `summary_metrics_plot_lstm.png`).
     - If a training history file is provided via the `--training_history_path` argument (see above), a PNG image of the training history (e.g., loss curves for LSTM, or mlogloss for XGBoost) will also be saved (e.g., `training_history_lstm.png`).
 
     Run `python src/evaluation/evaluate_model.py --help` for a full list of options.

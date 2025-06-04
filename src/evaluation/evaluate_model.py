@@ -34,15 +34,67 @@ def plot_confusion_matrix(y_true, y_pred, labels, model_name, save_path):
     plt.close()
     print(f"Confusion matrix plot saved to {save_path}")
 
-def plot_classification_report(report_dict, model_name, save_path):
-    plt.figure(figsize=(10, 6))
-    # Transpose for better plotting
-    report_df = pd.DataFrame(report_dict).iloc[:-1, :].T # Exclude support row for heatmap clarity
-    sns.heatmap(report_df, annot=True, cmap='viridis', fmt='.2f')
-    plt.title(f'Classification Report - {model_name}')
+def plot_classification_report(report_dict, class_names, model_name, save_path):
+    # Construct a DataFrame for plotting only per-class precision, recall, and f1-score
+    plot_data = {}
+    for cls_name in class_names:
+        if cls_name in report_dict and isinstance(report_dict[cls_name], dict):
+            plot_data[cls_name] = {
+                'precision': report_dict[cls_name].get('precision', 0),
+                'recall': report_dict[cls_name].get('recall', 0),
+                'f1-score': report_dict[cls_name].get('f1-score', 0)
+            }
+
+    if not plot_data:
+        print("Warning: No class-specific data found in classification report for plotting heatmap.")
+        # Still try to save a blank or minimal plot if needed, or just return
+        # For now, let's return if no data to prevent error with pd.DataFrame(plot_data)
+        return
+
+    report_df = pd.DataFrame(plot_data).T # Transpose to have classes as rows
+
+    plt.figure(figsize=(8, max(3, len(class_names) * 0.8))) # Adjusted figure size for clarity
+    sns.heatmap(report_df, annot=True, cmap='viridis', fmt='.2f', vmin=0, vmax=1) # Set vmin/vmax for consistency
+    plt.title(f'Classification Report (Per-Class Metrics) - {model_name}')
+    # Explicitly set y-axis labels if needed, though .T should handle it with DataFrame index
+    # plt.yticks(ticks=np.arange(len(report_df.index)) + 0.5, labels=report_df.index, rotation=0)
+    plt.tight_layout() # Adjust layout
     plt.savefig(save_path)
     plt.close()
-    print(f"Classification report plot saved to {save_path}")
+    print(f"Per-class classification report plot saved to {save_path}")
+
+def plot_summary_classification_metrics(report_dict, model_name, save_path):
+    metrics_to_plot = {}
+    if 'accuracy' in report_dict:
+        metrics_to_plot['Accuracy'] = report_dict['accuracy']
+
+    for avg_type in ['macro avg', 'weighted avg']:
+        if avg_type in report_dict:
+            for metric in ['precision', 'recall', 'f1-score']:
+                if metric in report_dict[avg_type]:
+                    metrics_to_plot[f'{avg_type.replace(" ", "_").capitalize()}_{metric.capitalize()}'] = report_dict[avg_type][metric]
+
+    if not metrics_to_plot:
+        print("Warning: No summary metrics found in classification report for plotting.")
+        return
+
+    metrics_df = pd.DataFrame(list(metrics_to_plot.items()), columns=['Metric', 'Score'])
+
+    plt.figure(figsize=(10, 6))
+    ax = sns.barplot(x='Score', y='Metric', data=metrics_df, palette='mako', orient='h')
+    plt.title(f'Summary Classification Metrics - {model_name}')
+    plt.xlabel('Score')
+    plt.ylabel('')
+    plt.xlim(0, 1) # Scores are between 0 and 1
+
+    # Add text annotations to the bars
+    for i, v in enumerate(metrics_df['Score']):
+        ax.text(v + 0.01, i, f'{v:.2f}', color='black', va='center')
+
+    plt.tight_layout()
+    plt.savefig(save_path)
+    plt.close()
+    print(f"Summary classification metrics plot saved to {save_path}")
 
 def plot_lstm_training_history(history_data, model_name, save_path):
     epochs_trained = history_data.get('epochs_trained', len(history_data.get('train_loss', [])))
@@ -258,7 +310,11 @@ def evaluate_model(model_path, model_type, data_path, reports_dir, window_size, 
     plot_confusion_matrix(y_true, y_pred, class_names, model_type.upper(), cm_plot_path)
 
     report_plot_path = os.path.join(reports_dir, f"classification_report_{model_type}.png")
-    plot_classification_report(report_dict, model_type.upper(), report_plot_path)
+    plot_classification_report(report_dict, class_names, model_type.upper(), report_plot_path)
+
+    # --- Plot Summary Metrics ---
+    summary_metrics_plot_path = os.path.join(reports_dir, f"summary_metrics_plot_{model_type}.png")
+    plot_summary_classification_metrics(report_dict, model_type.upper(), summary_metrics_plot_path)
 
     # --- Plot Training History (if path provided) ---
     if training_history_path:
