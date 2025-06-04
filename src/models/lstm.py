@@ -9,6 +9,7 @@ from sklearn.model_selection import train_test_split
 import torch.optim.lr_scheduler as lr_scheduler
 import os
 import argparse
+import json
 
 # Define constants for default values
 DEFAULT_DATA_PATH = 'data/processed/eurusd_final_processed.csv'
@@ -117,6 +118,9 @@ def train_lstm(data_path, model_save_path, epochs, batch_size, learning_rate, hi
     epochs_no_improve = 0
     best_model_state = None
 
+    train_losses = []
+    val_losses = []
+
     for epoch in range(epochs):
         model.train()
         total_loss = 0
@@ -138,6 +142,9 @@ def train_lstm(data_path, model_save_path, epochs, batch_size, learning_rate, hi
 
         avg_train_loss = total_loss / len(train_loader) if len(train_loader) > 0 else 0
         avg_val_loss = total_val_loss / len(val_loader) if len(val_loader) > 0 else 0
+
+        train_losses.append(avg_train_loss)
+        val_losses.append(avg_val_loss)
 
         scheduler.step(avg_val_loss)
 
@@ -169,8 +176,20 @@ def train_lstm(data_path, model_save_path, epochs, batch_size, learning_rate, hi
     try:
         torch.save(model.state_dict(), model_save_path)
         print(f"Model saved to {model_save_path}")
+
+        # Save training history
+        history_save_path = model_save_path.replace('.h5', '_history.json')
+        history_data = {
+            'train_loss': train_losses,
+            'val_loss': val_losses,
+            'epochs_trained': epoch + 1
+        }
+        with open(history_save_path, 'w') as f:
+            json.dump(history_data, f, indent=4)
+        print(f"Training history saved to {history_save_path}")
+
     except Exception as e:
-        print(f"Error saving model: {e}")
+        print(f"Error saving model or history: {e}")
 
     print("\nLSTM Training finished.") # Updated message
     # Evaluation on test set is now handled by evaluate_model.py

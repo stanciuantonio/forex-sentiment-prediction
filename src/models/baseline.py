@@ -9,6 +9,7 @@ import xgboost as xgb
 import joblib
 import os
 import argparse
+import json
 
 # Define constants for default values
 DEFAULT_DATA_PATH = 'data/processed/eurusd_final_processed.csv'
@@ -76,17 +77,28 @@ def train_baseline(data_path, model_save_path, window_size, max_depth, learning_
         learning_rate=learning_rate,
         n_estimators=n_estimators,
         random_state=random_state,
-        use_label_encoder=False # Suppress warning
+        use_label_encoder=False, # Suppress warning
+        eval_metric='mlogloss' # Moved eval_metric here
     )
 
-    model.fit(X_train, y_train)
+    # Fit the model with evaluation set to capture history
+    model.fit(X_train, y_train, eval_set=[(X_test, y_test)], verbose=False) # Removed eval_metric from here
+    eval_results = model.evals_result() # Get evaluation results
 
     # Save the trained model
     try:
         joblib.dump(model, model_save_path)
         print(f"Model saved to {model_save_path}")
+
+        # Save training history
+        history_save_path = model_save_path.replace('.joblib', '_history.json')
+        # eval_results is already a dict suitable for JSON
+        with open(history_save_path, 'w') as f:
+            json.dump(eval_results, f, indent=4)
+        print(f"Training history saved to {history_save_path}")
+
     except Exception as e:
-        print(f"Error saving model: {e}")
+        print(f"Error saving model or history: {e}")
 
     print("\nXGBoost Baseline Training finished.") # Updated message
     # Evaluation on test set is now handled by evaluate_model.py

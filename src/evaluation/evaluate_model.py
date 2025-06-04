@@ -11,6 +11,7 @@ import os
 import argparse
 import matplotlib.pyplot as plt
 import seaborn as sns
+import json # Added for loading history
 
 # Import LSTMModel class from the training script
 # Assuming lstm.py is in ../models relative to this script
@@ -43,7 +44,53 @@ def plot_classification_report(report_dict, model_name, save_path):
     plt.close()
     print(f"Classification report plot saved to {save_path}")
 
-def evaluate_model(model_path, model_type, data_path, reports_dir, window_size, lstm_hidden_size, lstm_num_layers, lstm_dropout_rate):
+def plot_lstm_training_history(history_data, model_name, save_path):
+    epochs_trained = history_data.get('epochs_trained', len(history_data.get('train_loss', [])))
+    epochs_range = range(1, epochs_trained + 1)
+
+    plt.figure(figsize=(10, 6))
+    if 'train_loss' in history_data:
+        plt.plot(epochs_range, history_data['train_loss'][:epochs_trained], label='Training Loss', marker='o', linestyle='-')
+    if 'val_loss' in history_data:
+        plt.plot(epochs_range, history_data['val_loss'][:epochs_trained], label='Validation Loss', marker='x', linestyle='--')
+
+    plt.title(f'LSTM Training and Validation Loss - {model_name}')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(save_path)
+    plt.close()
+    print(f"LSTM training history plot saved to {save_path}")
+
+def plot_xgboost_training_history(history_data, model_name, save_path):
+    # XGBoost history is typically like: {'validation_0': {'mlogloss': [values]}}
+    # Assuming one eval set, typically named 'validation_0' or similar by default.
+    eval_set_key = next(iter(history_data.keys()), None) # Get the first (and likely only) eval set key
+    if not eval_set_key or not isinstance(history_data[eval_set_key], dict):
+        print("Could not find evaluation metric data in XGBoost history.")
+        return
+
+    metric_key = next(iter(history_data[eval_set_key].keys()), None) # Get the first metric (e.g., 'mlogloss')
+    if not metric_key:
+        print(f"Could not find metric data under {eval_set_key} in XGBoost history.")
+        return
+
+    metric_values = history_data[eval_set_key][metric_key]
+    iterations = range(1, len(metric_values) + 1)
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(iterations, metric_values, label=f'{metric_key} ({eval_set_key})', marker='o', linestyle='-')
+    plt.title(f'XGBoost Training History ({metric_key}) - {model_name}')
+    plt.xlabel('Boosting Round')
+    plt.ylabel(metric_key.capitalize())
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(save_path)
+    plt.close()
+    print(f"XGBoost training history plot saved to {save_path}")
+
+def evaluate_model(model_path, model_type, data_path, reports_dir, window_size, lstm_hidden_size, lstm_num_layers, lstm_dropout_rate, training_history_path=None):
     os.makedirs(reports_dir, exist_ok=True)
 
     # Load data
@@ -213,6 +260,27 @@ def evaluate_model(model_path, model_type, data_path, reports_dir, window_size, 
     report_plot_path = os.path.join(reports_dir, f"classification_report_{model_type}.png")
     plot_classification_report(report_dict, model_type.upper(), report_plot_path)
 
+    # --- Plot Training History (if path provided) ---
+    if training_history_path:
+        try:
+            with open(training_history_path, 'r') as f:
+                history_data = json.load(f)
+
+            model_name_for_plot = f"{model_type.upper()} ({os.path.basename(model_path)})"
+            history_plot_save_path = os.path.join(reports_dir, f"training_history_{model_type}.png")
+
+            if model_type == 'lstm':
+                plot_lstm_training_history(history_data, model_name_for_plot, history_plot_save_path)
+            elif model_type == 'xgboost':
+                plot_xgboost_training_history(history_data, model_name_for_plot, history_plot_save_path)
+
+        except FileNotFoundError:
+            print(f"Warning: Training history file not found at {training_history_path}. Skipping history plot.")
+        except json.JSONDecodeError:
+            print(f"Warning: Error decoding JSON from training history file {training_history_path}. Skipping history plot.")
+        except Exception as e:
+            print(f"Warning: Could not plot training history due to an error: {e}")
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Evaluate a trained Forex prediction model.")
     parser.add_argument('--model_path', type=str, required=True, help='Path to the trained model file (.h5 for LSTM, .joblib for XGBoost)')
@@ -224,6 +292,7 @@ if __name__ == "__main__":
     parser.add_argument('--lstm_hidden_size', type=int, default=LSTM_DEFAULT_HIDDEN_SIZE, help='Hidden size of LSTM layers (used if model_type is lstm)')
     parser.add_argument('--lstm_num_layers', type=int, default=LSTM_DEFAULT_NUM_LAYERS, help='Number of LSTM layers (used if model_type is lstm)')
     parser.add_argument('--lstm_dropout_rate', type=float, default=LSTM_DEFAULT_DROPOUT, help='Dropout rate for LSTM (used if model_type is lstm)')
+    parser.add_argument('--training_history_path', type=str, default=None, help='Optional path to the training history JSON file (e.g., loss_history.json)')
 
     args = parser.parse_args()
 
@@ -235,5 +304,6 @@ if __name__ == "__main__":
         window_size=args.window_size,
         lstm_hidden_size=args.lstm_hidden_size,
         lstm_num_layers=args.lstm_num_layers,
-        lstm_dropout_rate=args.lstm_dropout_rate
+        lstm_dropout_rate=args.lstm_dropout_rate,
+        training_history_path=args.training_history_path
     )

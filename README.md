@@ -130,12 +130,27 @@ The primary dataset for modeling, `data/processed/eurusd_final_processed.csv`, i
       Make sure to provide the same LSTM architecture parameters that were used during training.
 
       ```bash
-      python src/evaluation/evaluate_model.py --model_type lstm --model_path results/models/lstm_model.h5 --lstm_hidden_size 128 --lstm_num_layers 3 --lstm_dropout_rate 0.3
+      python src/evaluation/evaluate_model.py \
+          --model_path results/models/lstm_model.h5 \
+          --model_type lstm \
+          --data_path data/processed/eurusd_final_processed.csv \
+          --reports_dir results/reports \
+          --window_size 30 \
+          --lstm_hidden_size 128 \
+          --lstm_num_layers 3 \
+          --lstm_dropout_rate 0.3 \
+          --training_history_path results/models/lstm_model_history.json # Optional
       ```
 
     - **Evaluate a trained XGBoost model:**
       ```bash
-      python src/evaluation/evaluate_model.py --model_type xgboost --model_path results/models/xgboost_baseline.joblib --data_path data/processed/eurusd_final_processed.csv --reports_dir results/reports
+      python src/evaluation/evaluate_model.py \
+          --model_path results/models/xgboost_baseline.joblib \
+          --model_type xgboost \
+          --data_path data/processed/eurusd_final_processed.csv \
+          --reports_dir results/reports \
+          --window_size 30 \
+          --training_history_path results/models/xgboost_baseline_history.json # Optional
       ```
 
     **Command-line Arguments for `evaluate_model.py`:**
@@ -148,13 +163,15 @@ The primary dataset for modeling, `data/processed/eurusd_final_processed.csv`, i
     - `--lstm_hidden_size`: Hidden size of LSTM layers (default: 64, from `lstm.py`). **Required if `model_type` is `lstm` and non-default was used for training.**
     - `--lstm_num_layers`: Number of LSTM layers (default: 2, from `lstm.py`). **Required if `model_type` is `lstm` and non-default was used for training.**
     - `--lstm_dropout_rate`: Dropout rate for LSTM (default: 0.2, from `lstm.py`). **Required if `model_type` is `lstm` and non-default was used for training.**
+    - `--training_history_path`: Path to a training history file for LSTM (default: None).
 
     **Outputs:**
-    The script will print accuracy and a classification report to the console. It will also save the following files to the specified `--reports_dir` (e.g., `results/reports/`):
+    The script will print metrics like accuracy and a classification report to the console. It will also save the following to the `results/reports/` directory:
 
-    - `classification_metrics_<model_type>.txt`: Text file containing accuracy and detailed classification report.
-    - `confusion_matrix_<model_type>.png`: Plot of the confusion matrix.
-    - `classification_report_<model_type>.png`: Plot of the classification report (heatmap).
+    - A text file with classification metrics (e.g., `classification_metrics_lstm.txt`).
+    - A PNG image of the confusion matrix (e.g., `confusion_matrix_lstm.png`).
+    - A PNG image of the classification report heatmap (e.g., `classification_report_lstm.png`).
+    - If a training history file is provided via the `--training_history_path` argument (see above), a PNG image of the training history (e.g., loss curves for LSTM, or mlogloss for XGBoost) will also be saved (e.g., `training_history_lstm.png`).
 
     Run `python src/evaluation/evaluate_model.py --help` for a full list of options.
 
