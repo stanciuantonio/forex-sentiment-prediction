@@ -183,7 +183,7 @@ The project is organized as follows:
     - `baseline.py`: Trains baseline models (e.g., XGBoost, Gaussian Process Regression).
     - _Note: A script for making predictions with trained models (e.g., `predict_model.py`) is not currently present in this directory._
   - `src/evaluation/`: Scripts for evaluating model performance.
-    - _Note: This directory is currently empty. Scripts for model evaluation (e.g., `evaluate_model.py`) need to be added here._
+    - `evaluate_model.py`: Evaluates the model and saves the results to the `results/reports/` directory.
 - `results/`: Contains model outputs.
 
   - `results/models/`: Saved model weights/checkpoints (e.g., from `lstm.py`, `baseline.py`).
