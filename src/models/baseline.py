@@ -21,10 +21,17 @@ DEFAULT_N_ESTIMATORS = 100
 DEFAULT_RANDOM_STATE = 42
 
 FEATURE_COLUMNS = [
-    'log_return', 'gdelt_sentiment', 'sentiment_7d_mean',
-    'log_return_7d_mean', 'log_return_7d_std',
-    'close_30d_ma', 'close_30d_std',
-    'daily_range', 'open_close_change'
+    # Base
+    'log_return', 'gdelt_sentiment',
+    # User's added features
+    'sentiment_7d_mean', 'log_return_7d_mean', 'log_return_7d_std',
+    'close_30d_ma', 'close_30d_std', 'daily_range', 'open_close_change',
+    # New Features
+    'RSI_14', 'MACD_12_26_9', 'MACDh_12_26_9', 'MACDs_12_26_9', # from pandas_ta
+    'ATRr_14', # from pandas_ta
+    'bb_pos',
+    'sentiment_delta', 'sentiment_7d_std',
+    'confluence', 'return_x_sentiment'
 ]
 
 def train_baseline(data_path, model_save_path, window_size, max_depth, learning_rate, n_estimators, random_state):

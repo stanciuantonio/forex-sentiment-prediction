@@ -23,10 +23,17 @@ DEFAULT_DATA_PATH = 'data/processed/eurusd_final_processed.csv'
 DEFAULT_REPORTS_DIR = 'results/reports'
 DEFAULT_WINDOW_SIZE = 30 # Should match the window size used during training for LSTM
 FEATURE_COLUMNS = [
-    'log_return', 'gdelt_sentiment', 'sentiment_7d_mean',
-    'log_return_7d_mean', 'log_return_7d_std',
-    'close_30d_ma', 'close_30d_std',
-    'daily_range', 'open_close_change'
+    # Base
+    'log_return', 'gdelt_sentiment',
+    # User's added features
+    'sentiment_7d_mean', 'log_return_7d_mean', 'log_return_7d_std',
+    'close_30d_ma', 'close_30d_std', 'daily_range', 'open_close_change',
+    # New Features
+    'RSI_14', 'MACD_12_26_9', 'MACDh_12_26_9', 'MACDs_12_26_9', # from pandas_ta
+    'ATRr_14', # from pandas_ta
+    'bb_pos',
+    'sentiment_delta', 'sentiment_7d_std',
+    'confluence', 'return_x_sentiment'
 ]
 
 def plot_confusion_matrix(y_true, y_pred, labels, model_name, save_path):

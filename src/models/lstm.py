@@ -4,33 +4,46 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import classification_report, accuracy_score
 from sklearn.model_selection import train_test_split
 import torch.optim.lr_scheduler as lr_scheduler
 import os
 import argparse
 import json
+import warnings
 
-# Define constants for default values
+# Suppress warnings for cleaner output
+warnings.filterwarnings("ignore", category=UserWarning, module='sklearn')
+
+# --- Model and Feature Definitions ---
 DEFAULT_DATA_PATH = 'data/processed/eurusd_final_processed.csv'
 DEFAULT_MODEL_SAVE_PATH = 'results/models/lstm_model.h5'
-DEFAULT_EPOCHS = 100 # Reduced default for quicker runs, can be overridden
+DEFAULT_EPOCHS = 50
 DEFAULT_BATCH_SIZE = 32
-DEFAULT_LEARNING_RATE = 0.001
-DEFAULT_HIDDEN_SIZE = 64
-DEFAULT_NUM_LAYERS = 2
-DEFAULT_DROPOUT = 0.2
+DEFAULT_LEARNING_RATE = 1e-4
+DEFAULT_HIDDEN_SIZE = 32
+DEFAULT_NUM_LAYERS = 1
+DEFAULT_DROPOUT = 0.3
 DEFAULT_WINDOW_SIZE = 30
 DEFAULT_EARLY_STOPPING_PATIENCE = 15
+DEFAULT_WEIGHT_DECAY = 1e-4
+DEFAULT_GRADIENT_CLIP_VALUE = 1.0
 
 FEATURE_COLUMNS = [
-    'log_return', 'gdelt_sentiment', 'sentiment_7d_mean',
-    'log_return_7d_mean', 'log_return_7d_std',
-    'close_30d_ma', 'close_30d_std',
-    'daily_range', 'open_close_change'
+    # Base
+    'log_return', 'gdelt_sentiment',
+    # User's added features
+    'sentiment_7d_mean', 'log_return_7d_mean', 'log_return_7d_std',
+    'close_30d_ma', 'close_30d_std', 'daily_range', 'open_close_change',
+    # New Features
+    'RSI_14', 'MACD_12_26_9', 'MACDh_12_26_9', 'MACDs_12_26_9',
+    'ATRr_14',
+    'bb_pos',
+    'sentiment_delta', 'sentiment_7d_std',
+    'confluence', 'return_x_sentiment'
 ]
+
 class LSTMModel(nn.Module):
-    def __init__(self, input_size=2, hidden_size=DEFAULT_HIDDEN_SIZE, num_layers=DEFAULT_NUM_LAYERS, num_classes=3, dropout_rate=DEFAULT_DROPOUT):
+    def __init__(self, input_size, hidden_size, num_layers, num_classes, dropout_rate):
         super(LSTMModel, self).__init__()
         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True, dropout=dropout_rate if num_layers > 1 else 0)
         self.fc = nn.Linear(hidden_size, num_classes)
@@ -43,49 +56,37 @@ class LSTMModel(nn.Module):
         out = self.fc(out)
         return out
 
-def train_lstm(data_path, model_save_path, epochs, batch_size, learning_rate, hidden_size, num_layers, dropout_rate, window_size, early_stopping_patience):
+def train_lstm(data_path, model_save_path, epochs, batch_size, learning_rate, hidden_size, num_layers, dropout_rate, window_size, early_stopping_patience, weight_decay, gradient_clip_value):
     os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
 
+    # --- Data Loading and Preparation ---
     try:
         df = pd.read_csv(data_path)
     except FileNotFoundError:
         print(f"Error: Data file not found at {data_path}")
-        return None
+        return
     df['date'] = pd.to_datetime(df['date'])
-    df = df.sort_values('date')
+    df = df.sort_values('date').dropna().reset_index(drop=True)
 
     sequences = []
     targets = []
-
-    if len(df) <= window_size:
-        print(f"Error: DataFrame has insufficient data (rows: {len(df)}) to create sequences with window size {window_size}.")
-        return None
-
     for i in range(window_size, len(df)):
-        window = df.iloc[i-window_size:i]
-        sequence = window[FEATURE_COLUMNS].values
+        sequence = df.iloc[i-window_size:i][FEATURE_COLUMNS].values
         sequences.append(sequence)
         targets.append(df.iloc[i]['label'])
 
-    if not sequences:
-        print("Error: No sequences were created. Check window_size and data length.")
-        return None
-
     X = np.array(sequences)
-    y = np.array(targets)
-    y = y + 1
+    y = np.array(targets) + 1  # Labels to 0, 1, 2
 
+    # --- Train/Validation/Test Split ---
     train_val_ratio = 0.85
     test_ratio = 0.15
-    split_idx_test = int(len(X) * (1 - test_ratio))
+    split_idx_test = int(len(X) * train_val_ratio)
+
     X_train_val, X_test = X[:split_idx_test], X[split_idx_test:]
     y_train_val, y_test = y[:split_idx_test], y[split_idx_test:]
 
-    if len(X_train_val) == 0 or len(X_test) == 0:
-        print("Error: Not enough data for initial train_val/test split.")
-        return None
-
-    val_relative_ratio = test_ratio / (1 - test_ratio)
+    val_relative_ratio = test_ratio / train_val_ratio
     X_train, X_val, y_train, y_val = train_test_split(
         X_train_val, y_train_val, test_size=val_relative_ratio, shuffle=False
     )
@@ -94,38 +95,33 @@ def train_lstm(data_path, model_save_path, epochs, batch_size, learning_rate, hi
     print(f"Validation samples: {len(X_val)}")
     print(f"Test samples: {len(X_test)}")
 
-    if len(X_train) == 0 or len(X_val) == 0 or len(X_test) == 0:
-        print("Error: One of the data splits is empty. Adjust ratios or check data size.")
-        return None
-
+    # --- Scaling ---
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train.reshape(-1, X_train.shape[-1])).reshape(X_train.shape)
     X_val_scaled = scaler.transform(X_val.reshape(-1, X_val.shape[-1])).reshape(X_val.shape)
-    X_test_scaled = scaler.transform(X_test.reshape(-1, X_test.shape[-1])).reshape(X_test.shape)
+    # Note: Test set is not used here, but scaled in evaluate_model.py using the same logic.
 
+    # --- PyTorch DataLoader ---
     X_train_tensor = torch.FloatTensor(X_train_scaled)
     y_train_tensor = torch.LongTensor(y_train)
     X_val_tensor = torch.FloatTensor(X_val_scaled)
     y_val_tensor = torch.LongTensor(y_val)
-    X_test_tensor = torch.FloatTensor(X_test_scaled)
-    y_test_tensor = torch.LongTensor(y_test)
 
     train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False)
     val_dataset = TensorDataset(X_val_tensor, y_val_tensor)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
+    # --- Model Training ---
     model = LSTMModel(input_size=X_train.shape[-1], hidden_size=hidden_size, num_layers=num_layers, num_classes=len(np.unique(y)), dropout_rate=dropout_rate)
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=5, factor=0.5)
 
     min_val_loss = float('inf')
     epochs_no_improve = 0
     best_model_state = None
-
-    train_losses = []
-    val_losses = []
+    train_losses, val_losses = [], []
 
     for epoch in range(epochs):
         model.train()
@@ -135,6 +131,7 @@ def train_lstm(data_path, model_save_path, epochs, batch_size, learning_rate, hi
             outputs = model(batch_X)
             loss = criterion(outputs, batch_y)
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), gradient_clip_value)
             optimizer.step()
             total_loss += loss.item()
 
@@ -146,17 +143,14 @@ def train_lstm(data_path, model_save_path, epochs, batch_size, learning_rate, hi
                 loss_val = criterion(outputs_val, batch_y_val)
                 total_val_loss += loss_val.item()
 
-        avg_train_loss = total_loss / len(train_loader) if len(train_loader) > 0 else 0
-        avg_val_loss = total_val_loss / len(val_loader) if len(val_loader) > 0 else 0
-
+        avg_train_loss = total_loss / len(train_loader)
+        avg_val_loss = total_val_loss / len(val_loader)
         train_losses.append(avg_train_loss)
         val_losses.append(avg_val_loss)
-
         scheduler.step(avg_val_loss)
 
         if (epoch + 1) % 10 == 0:
-            current_lr = optimizer.param_groups[0]['lr']
-            print(f'Epoch [{epoch+1}/{epochs}], Train Loss: {avg_train_loss:.4f}, Val Loss: {avg_val_loss:.4f}, LR: {current_lr:.6f}')
+            print(f'Epoch [{epoch+1}/{epochs}], Train Loss: {avg_train_loss:.4f}, Val Loss: {avg_val_loss:.4f}')
 
         if avg_val_loss < min_val_loss:
             min_val_loss = avg_val_loss
@@ -166,53 +160,36 @@ def train_lstm(data_path, model_save_path, epochs, batch_size, learning_rate, hi
             epochs_no_improve += 1
 
         if epochs_no_improve >= early_stopping_patience:
-            print(f'Early stopping triggered at epoch {epoch+1} due to no improvement in validation loss for {early_stopping_patience} epochs.')
-            if best_model_state is not None:
-                model.load_state_dict(best_model_state)
-                print("Restored best model weights.")
+            print(f'Early stopping triggered at epoch {epoch+1}.')
             break
 
-    if best_model_state is not None :
+    # --- Save Model and History ---
+    if best_model_state:
         model.load_state_dict(best_model_state)
-        print("Using best model weights found during training.")
-    else:
-        print("Warning: No best model state was found or saved. Using last model state.")
+        print("Restored best model weights.")
 
-    # Save the trained model
-    try:
-        torch.save(model.state_dict(), model_save_path)
-        print(f"Model saved to {model_save_path}")
+    torch.save(model.state_dict(), model_save_path)
+    print(f"Model saved to {model_save_path}")
 
-        # Save training history
-        history_save_path = model_save_path.replace('.h5', '_history.json')
-        history_data = {
-            'train_loss': train_losses,
-            'val_loss': val_losses,
-            'epochs_trained': epoch + 1
-        }
-        with open(history_save_path, 'w') as f:
-            json.dump(history_data, f, indent=4)
-        print(f"Training history saved to {history_save_path}")
-
-    except Exception as e:
-        print(f"Error saving model or history: {e}")
-
-    print("\nLSTM Training finished.") # Updated message
-    # Evaluation on test set is now handled by evaluate_model.py
-    return model
+    history = {'train_loss': train_losses, 'val_loss': val_losses}
+    with open(model_save_path.replace('.h5', '_history.json'), 'w') as f:
+        json.dump(history, f)
+    print("Training history saved.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train LSTM Model for Forex Prediction")
-    parser.add_argument('--data_path', type=str, default=DEFAULT_DATA_PATH, help='Path to the processed data CSV file')
-    parser.add_argument('--model_save_path', type=str, default=DEFAULT_MODEL_SAVE_PATH, help='Path to save the trained model')
-    parser.add_argument('--epochs', type=int, default=DEFAULT_EPOCHS, help='Number of training epochs')
-    parser.add_argument('--batch_size', type=int, default=DEFAULT_BATCH_SIZE, help='Batch size for training')
-    parser.add_argument('--learning_rate', type=float, default=DEFAULT_LEARNING_RATE, help='Learning rate for Adam optimizer')
-    parser.add_argument('--hidden_size', type=int, default=DEFAULT_HIDDEN_SIZE, help='Number of features in the hidden state h')
-    parser.add_argument('--num_layers', type=int, default=DEFAULT_NUM_LAYERS, help='Number of recurrent layers')
-    parser.add_argument('--dropout_rate', type=float, default=DEFAULT_DROPOUT, help='Dropout rate for LSTM and FC layers')
-    parser.add_argument('--window_size', type=int, default=DEFAULT_WINDOW_SIZE, help='Size of the lookback window for sequences')
-    parser.add_argument('--early_stopping_patience', type=int, default=DEFAULT_EARLY_STOPPING_PATIENCE, help='Patience for early stopping')
+    parser.add_argument('--data_path', type=str, default=DEFAULT_DATA_PATH, help='Path to data')
+    parser.add_argument('--model_save_path', type=str, default=DEFAULT_MODEL_SAVE_PATH, help='Path to save model')
+    parser.add_argument('--epochs', type=int, default=DEFAULT_EPOCHS)
+    parser.add_argument('--batch_size', type=int, default=DEFAULT_BATCH_SIZE)
+    parser.add_argument('--learning_rate', type=float, default=DEFAULT_LEARNING_RATE)
+    parser.add_argument('--hidden_size', type=int, default=DEFAULT_HIDDEN_SIZE)
+    parser.add_argument('--num_layers', type=int, default=DEFAULT_NUM_LAYERS)
+    parser.add_argument('--dropout_rate', type=float, default=DEFAULT_DROPOUT)
+    parser.add_argument('--window_size', type=int, default=DEFAULT_WINDOW_SIZE)
+    parser.add_argument('--early_stopping_patience', type=int, default=DEFAULT_EARLY_STOPPING_PATIENCE)
+    parser.add_argument('--weight_decay', type=float, default=DEFAULT_WEIGHT_DECAY)
+    parser.add_argument('--gradient_clip_value', type=float, default=DEFAULT_GRADIENT_CLIP_VALUE)
 
     args = parser.parse_args()
 
@@ -226,5 +203,7 @@ if __name__ == "__main__":
         num_layers=args.num_layers,
         dropout_rate=args.dropout_rate,
         window_size=args.window_size,
-        early_stopping_patience=args.early_stopping_patience
+        early_stopping_patience=args.early_stopping_patience,
+        weight_decay=args.weight_decay,
+        gradient_clip_value=args.gradient_clip_value
     )
