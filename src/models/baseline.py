@@ -20,6 +20,13 @@ DEFAULT_LEARNING_RATE = 0.1
 DEFAULT_N_ESTIMATORS = 100
 DEFAULT_RANDOM_STATE = 42
 
+FEATURE_COLUMNS = [
+    'log_return', 'gdelt_sentiment', 'sentiment_7d_mean',
+    'log_return_7d_mean', 'log_return_7d_std',
+    'close_30d_ma', 'close_30d_std',
+    'daily_range', 'open_close_change'
+]
+
 def train_baseline(data_path, model_save_path, window_size, max_depth, learning_rate, n_estimators, random_state):
     # Ensure the save directory exists
     os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
@@ -43,7 +50,7 @@ def train_baseline(data_path, model_save_path, window_size, max_depth, learning_
 
     for i in range(window_size, len(df)):
         window = df.iloc[i-window_size:i]
-        feature_row = window[['log_return', 'gdelt_sentiment']].values.flatten()
+        feature_row = window[FEATURE_COLUMNS].values.flatten()
         features.append(feature_row)
         targets.append(df.iloc[i]['label'])
 

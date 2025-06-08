@@ -22,6 +22,12 @@ from lstm import LSTMModel, DEFAULT_HIDDEN_SIZE as LSTM_DEFAULT_HIDDEN_SIZE, DEF
 DEFAULT_DATA_PATH = 'data/processed/eurusd_final_processed.csv'
 DEFAULT_REPORTS_DIR = 'results/reports'
 DEFAULT_WINDOW_SIZE = 30 # Should match the window size used during training for LSTM
+FEATURE_COLUMNS = [
+    'log_return', 'gdelt_sentiment', 'sentiment_7d_mean',
+    'log_return_7d_mean', 'log_return_7d_std',
+    'close_30d_ma', 'close_30d_std',
+    'daily_range', 'open_close_change'
+]
 
 def plot_confusion_matrix(y_true, y_pred, labels, model_name, save_path):
     cm = confusion_matrix(y_true, y_pred)
@@ -169,7 +175,7 @@ def evaluate_model(model_path, model_type, data_path, reports_dir, window_size, 
             print(f"Error: DataFrame has insufficient data for LSTM window size {window_size}.")
             return
         for i in range(window_size, len(df)):
-            sequence = df.iloc[i-window_size:i][['log_return', 'gdelt_sentiment']].values
+            sequence = df.iloc[i-window_size:i][FEATURE_COLUMNS].values
             sequences.append(sequence)
         X_eval = np.array(sequences)
 
@@ -197,7 +203,7 @@ def evaluate_model(model_path, model_type, data_path, reports_dir, window_size, 
         # Create a temporary training set from the df to fit the scaler correctly
         temp_train_sequences = []
         for i in range(window_size, split_idx_test_eval + window_size): # up to the start of the test portion
-             temp_sequence = df.iloc[i-window_size:i][['log_return', 'gdelt_sentiment']].values
+             temp_sequence = df.iloc[i-window_size:i][FEATURE_COLUMNS].values
              temp_train_sequences.append(temp_sequence)
 
         if not temp_train_sequences:
@@ -243,7 +249,7 @@ def evaluate_model(model_path, model_type, data_path, reports_dir, window_size, 
             print(f"Error: DataFrame has insufficient data for XGBoost window size {window_size}.")
             return
         for i in range(window_size, len(df)):
-            feature_row = df.iloc[i-window_size:i][['log_return', 'gdelt_sentiment']].values.flatten()
+            feature_row = df.iloc[i-window_size:i][FEATURE_COLUMNS].values.flatten()
             features_eval.append(feature_row)
         X_eval = np.array(features_eval)
 

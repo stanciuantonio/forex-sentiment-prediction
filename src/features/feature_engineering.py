@@ -36,6 +36,15 @@ def process_final_dataset():
     print(f"HOLD ( 0): {label_dist.get(0, 0)} ({label_dist.get(0, 0)/len(df)*100:.1f}%)")
     print(f"BUY  (+1): {label_dist.get(1, 0)} ({label_dist.get(1, 0)/len(df)*100:.1f}%)")
 
+    # Additional technical features
+    df['sentiment_7d_mean'] = df['gdelt_sentiment'].rolling(window=7).mean()
+    df['log_return_7d_mean'] = df['log_return'].rolling(window=7).mean()
+    df['log_return_7d_std'] = df['log_return'].rolling(window=7).std()
+    df['close_30d_ma'] = df['close'].rolling(window=30).mean()
+    df['close_30d_std'] = df['close'].rolling(window=30).std()
+    df['daily_range'] = df['high'] - df['low']
+    df['open_close_change'] = df['close'] - df['open']
+
     # Clean NaNs
     df_clean = df.dropna()
 

@@ -23,6 +23,12 @@ DEFAULT_DROPOUT = 0.2
 DEFAULT_WINDOW_SIZE = 30
 DEFAULT_EARLY_STOPPING_PATIENCE = 15
 
+FEATURE_COLUMNS = [
+    'log_return', 'gdelt_sentiment', 'sentiment_7d_mean',
+    'log_return_7d_mean', 'log_return_7d_std',
+    'close_30d_ma', 'close_30d_std',
+    'daily_range', 'open_close_change'
+]
 class LSTMModel(nn.Module):
     def __init__(self, input_size=2, hidden_size=DEFAULT_HIDDEN_SIZE, num_layers=DEFAULT_NUM_LAYERS, num_classes=3, dropout_rate=DEFAULT_DROPOUT):
         super(LSTMModel, self).__init__()
@@ -57,7 +63,7 @@ def train_lstm(data_path, model_save_path, epochs, batch_size, learning_rate, hi
 
     for i in range(window_size, len(df)):
         window = df.iloc[i-window_size:i]
-        sequence = window[['log_return', 'gdelt_sentiment']].values
+        sequence = window[FEATURE_COLUMNS].values
         sequences.append(sequence)
         targets.append(df.iloc[i]['label'])
 
