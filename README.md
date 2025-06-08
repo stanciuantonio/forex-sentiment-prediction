@@ -2,7 +2,7 @@
 
 Our project aims to build a hybrid pipeline that merges historical price data with daily sentiment scores derived from Forex news to predict EUR/USD movements. We utilize price data (e.g., from `eurusd_daily.csv`, with Alpha Vantage as a potential source for updates) to obtain OHLC history and compute log-returns.
 
-In parallel, we leverage the GDELT dataset as our primary source for news articles relevant to Forex markets. A dedicated pipeline extracts and filters these articles, aiming for a manageable number per day (e.g., 1-3) by relevance and tone. Each relevant news item's content is then processed using FinBERT, a pre-trained language model specialized in financial text, to obtain a continuous sentiment score. These individual sentiment scores are aggregated daily (e.g., by averaging) to create a daily sentiment time series that aligns with the price data.
+In parallel, we leverage the GDELT dataset as our primary source for news articles relevant to Forex markets. A dedicated pipeline extracts and filters these articles, aiming for a manageable number per day (e.g., 1-3) by relevance and tone. Each relevant news item's content is then processed using FinBERT, a pre-trained language model specialized in financial text, to obtain a continuous sentiment score. These individual sentiment scores are aggregated daily (e.g., by averaging) to create a daily sentiment time series that aligns with the price data. The final dataset is enriched with a comprehensive set of technical indicators and sentiment-derived features, such as RSI, MACD, Bollinger Bands position, and sentiment volatility.
 
 As a baseline, we will train XGBoost model (as initially planned, and potentially implemented in `src/models/baseline.py`) on this combined feature set using scikit-learn's TimeSeriesSplit for rolling-window cross-validation. We will then train an LSTM (Long Short-Term Memory) network (implemented in `src/models/lstm.py`). The model will use 30-day lookback windows, incorporating both historical price-derived features (like log-returns) and the daily sentiment scores as inputs. For training, each day will be labeled based on a threshold method applied to the next-day log-return (e.g., > +0.2% for BUY, < -0.2% for SELL, otherwise HOLD), a technique supported by financial literature. Rigorous backtesting and reporting of cumulative profit metrics will be conducted throughout the project to ensure the reproducibility and academic validity of our findings.
 
@@ -18,8 +18,6 @@ We chose to focus on Forex markets due to their high liquidity and 24/5 operatio
   - [Model Training](#4--model-training)
   - [Model Evaluation](#5--model-evaluation)
 - [Project Structure](#project-structure)
-- [Loading Model Weights](#loading-model-weights)
-- [Contributing](#contributing)
 - [License](#license)
 
 ## Setup and Installation
@@ -75,28 +73,36 @@ The primary dataset for modeling, `data/processed/eurusd_final_processed.csv`, i
     _This script should use data from the previous steps and produce `data/processed/eurusd_final_processed.csv`._
 
 4.  **Model Training:**
-    Train the models using scripts in `src/models/`. Ensure the input data path points to `data/processed/eurusd_final_processed.csv` (or provide a different path via arguments).
+    Train the models using scripts in `src/models/`. Ensure the input data path points to `data/processed/eurusd_final_processed.csv`.
     Trained models will be saved in the `results/models/` directory.
 
     - **LSTM Model:**
-      To train the LSTM model, run `src/models/lstm.py`. You can customize hyperparameters using command-line arguments. For example:
+      To train the LSTM model with the optimized default parameters, simply run:
 
       ```bash
-      python src/models/lstm.py --epochs 150 --batch_size 64 --learning_rate 0.0005 --hidden_size 128 --num_layers 3 --dropout_rate 0.3
+      python src/models/lstm.py
+      ```
+
+      You can customize hyperparameters using command-line arguments. For example:
+
+      ```bash
+      python src/models/lstm.py --epochs 75 --learning_rate 0.0002
       ```
 
       Common arguments:
 
       - `--data_path`: Path to the input CSV data (default: `data/processed/eurusd_final_processed.csv`).
       - `--model_save_path`: Path to save the trained model (default: `results/models/lstm_model.h5`).
-      - `--epochs`: Number of training epochs (default: 100).
+      - `--epochs`: Number of training epochs (default: 50).
       - `--batch_size`: Batch size (default: 32).
-      - `--learning_rate`: Initial learning rate (default: 0.001).
-      - `--hidden_size`: LSTM hidden layer size (default: 64).
-      - `--num_layers`: Number of LSTM layers (default: 2).
-      - `--dropout_rate`: Dropout rate (default: 0.2).
+      - `--learning_rate`: Initial learning rate (default: 0.0001).
+      - `--hidden_size`: LSTM hidden layer size (default: 32).
+      - `--num_layers`: Number of LSTM layers (default: 1).
+      - `--dropout_rate`: Dropout rate (default: 0.3).
       - `--window_size`: Lookback window for sequences (default: 30).
       - `--early_stopping_patience`: Patience for early stopping (default: 15).
+      - `--weight_decay`: L2 penalty (default: 0.0001).
+      - `--gradient_clip_value`: Value for gradient clipping (default: 1.0).
 
       Run `python src/models/lstm.py --help` for a full list of options.
 
@@ -119,27 +125,19 @@ The primary dataset for modeling, `data/processed/eurusd_final_processed.csv`, i
 
       Run `python src/models/baseline.py --help` for a full list of options.
 
-    _Trained models should ideally be saved to the `results/models/` directory. Specify any command-line arguments for model configuration if applicable (e.g., epochs, learning rate)._
-
 5.  **Model Evaluation:**
-    After training, models can be evaluated using the `src/evaluation/evaluate_model.py` script. This script loads a trained model, processes the evaluation data, and generates performance metrics, a confusion matrix plot, and a classification report plot.
+    After training, models can be evaluated using `src/evaluation/evaluate_model.py`. This script loads a model and generates performance reports.
 
     **Example Usage:**
 
     - **Evaluate a trained LSTM model:**
-      Make sure to provide the same LSTM architecture parameters that were used during training.
+      The command below works because `evaluate_model.py` imports the default architecture parameters from `lstm.py`.
 
       ```bash
       python src/evaluation/evaluate_model.py \
           --model_path results/models/lstm_model.h5 \
           --model_type lstm \
-          --data_path data/processed/eurusd_final_processed.csv \
-          --reports_dir results/reports \
-          --window_size 30 \
-          --lstm_hidden_size 128 \
-          --lstm_num_layers 3 \
-          --lstm_dropout_rate 0.3 \
-          --training_history_path results/models/lstm_model_history.json # Optional
+          --training_history_path results/models/lstm_model_history.json
       ```
 
     - **Evaluate a trained XGBoost model:**
@@ -149,8 +147,7 @@ The primary dataset for modeling, `data/processed/eurusd_final_processed.csv`, i
           --model_type xgboost \
           --data_path data/processed/eurusd_final_processed.csv \
           --reports_dir results/reports \
-          --window_size 30 \
-          --training_history_path results/models/xgboost_baseline_history.json # Optional
+          --window_size 30
       ```
 
     **Command-line Arguments for `evaluate_model.py`:**
@@ -160,19 +157,10 @@ The primary dataset for modeling, `data/processed/eurusd_final_processed.csv`, i
     - `--data_path`: Path to the evaluation data CSV file (default: `data/processed/eurusd_final_processed.csv`).
     - `--reports_dir`: Directory to save evaluation reports and plots (default: `results/reports`).
     - `--window_size`: Lookback window size used during training (default: 30).
-    - `--lstm_hidden_size`: Hidden size of LSTM layers (default: 64, from `lstm.py`). **Required if `model_type` is `lstm` and non-default was used for training.**
-    - `--lstm_num_layers`: Number of LSTM layers (default: 2, from `lstm.py`). **Required if `model_type` is `lstm` and non-default was used for training.**
-    - `--lstm_dropout_rate`: Dropout rate for LSTM (default: 0.2, from `lstm.py`). **Required if `model_type` is `lstm` and non-default was used for training.**
-    - `--training_history_path`: Path to a training history file for LSTM (default: None).
-
-    **Outputs:**
-    The script will print metrics like accuracy and a classification report to the console. It will also save the following to the `results/reports/` directory:
-
-    - A text file with classification metrics (e.g., `classification_metrics_lstm.txt`).
-    - A PNG image of the confusion matrix (e.g., `confusion_matrix_lstm.png`).
-    - A PNG image of the classification report heatmap (focusing on per-class precision, recall, F1-score) (e.g., `classification_report_lstm.png`).
-    - A PNG image of a bar chart summarizing overall accuracy, macro average, and weighted average metrics (e.g., `summary_metrics_plot_lstm.png`).
-    - If a training history file is provided via the `--training_history_path` argument (see above), a PNG image of the training history (e.g., loss curves for LSTM, or mlogloss for XGBoost) will also be saved (e.g., `training_history_lstm.png`).
+    - `--lstm_hidden_size`: Hidden size of LSTM layers (default: 32). **Required if `model_type` is `lstm` and a non-default value was used for training.**
+    - `--lstm_num_layers`: Number of LSTM layers (default: 1). **Required if `model_type` is `lstm` and a non-default value was used for training.**
+    - `--lstm_dropout_rate`: Dropout rate for LSTM (default: 0.3). **Required if `model_type` is `lstm` and a non-default value was used for training.**
+    - `--training_history_path`: Path to a training history file (default: None).
 
     Run `python src/evaluation/evaluate_model.py --help` for a full list of options.
 
@@ -203,53 +191,11 @@ The project is organized as follows:
   - `src/evaluation/`: Scripts for evaluating model performance.
     - `evaluate_model.py`: Evaluates the model and saves the results to the `results/reports/` directory.
 - `results/`: Contains model outputs.
-
-  - `results/models/`: Saved model weights/checkpoints (e.g., from `lstm.py`, `baseline.py`).
-  - _Note: Consider adding a `results/reports/` directory for evaluation metrics, plots, etc._
-
+  - `results/models/`: Saved model weights/checkpoints.
+  - `results/reports/`: Saved evaluation reports and plots.
 - `requirements.txt`: Project Python dependencies.
 - `README.md`: This file.
-- `.gitignore`: Specifies intentionally untracked files that Git should ignore.
-
-## Loading Model Weights
-
-_TODO: If you are providing pre-trained model weights (e.g., in `results/models/`), describe them here. Specify:_
-
-- _Which models have pre-trained weights available (e.g., LSTM, XGBoost from baseline)._
-- _The exact filenames of the weight files (e.g., `lstm_model_final.h5`, `xgboost_baseline.pkl`)._
-- _Provide a clear code snippet demonstrating how to load these specific weights and use the model for inference._
-
-Example (modify according to your actual model and libraries):
-
-```python
-# from tensorflow.keras.models import load_model # For LSTM
-# import joblib # For scikit-learn models like XGBoost
-#
-# # Load LSTM model
-# lstm_model_path = 'results/models/your_lstm_model_name.h5'
-# lstm_model = load_model(lstm_model_path)
-#
-# # Load XGBoost model
-# xgboost_model_path = 'results/models/your_xgboost_model.pkl'
-# xgboost_model = joblib.load(xgboost_model_path)
-#
-# # ... code to prepare input data (X_new) ...
-# lstm_predictions = lstm_model.predict(X_new)
-# xgboost_predictions = xgboost_model.predict(X_new)
-# print("LSTM Predictions:", lstm_predictions)
-# print("XGBoost Predictions:", xgboost_predictions)
-```
-
-_If you are not providing pre-trained weights, you can state that models need to be trained by following the "Model Training" steps._
-
-## Contributing
-
-(Optional) If you are open to contributions, outline your guidelines here. For example:
-
-- How to report bugs.
-- How to propose new features.
-- Coding standards or style guides.
 
 ## License
 
-(Optional) Specify the license for your project (e.g., MIT, Apache 2.0). If you don't have one, you might consider adding one.
+This project is developed for academic purposes by students of the Universitat Pompeu Fabra (UPF), Barcelona.
