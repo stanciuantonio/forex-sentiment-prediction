@@ -1,141 +1,127 @@
 """
-Modelo Baseline XGBoost simplificado para predicción EUR/USD
+XGBoost baseline — flattened-window classifier for EUR/USD direction prediction.
+
+Scaler is saved to disk after training so evaluation can load it without leakage.
 """
+
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import classification_report, accuracy_score
 import xgboost as xgb
 import joblib
-import os
-import argparse
 import json
+from pathlib import Path
 
-# Define constants for default values
-DEFAULT_DATA_PATH = 'data/processed/eurusd_final_processed.csv'
-DEFAULT_MODEL_SAVE_PATH = 'results/models/xgboost_baseline.joblib'
-DEFAULT_WINDOW_SIZE = 30
-DEFAULT_MAX_DEPTH = 6
-DEFAULT_LEARNING_RATE = 0.1
-DEFAULT_N_ESTIMATORS = 100
-DEFAULT_RANDOM_STATE = 42
+from src.config import Config
 
-FEATURE_COLUMNS = [
-    # Base
-    'log_return', 'gdelt_sentiment',
-    # User's added features
-    'sentiment_7d_mean', 'log_return_7d_mean', 'log_return_7d_std',
-    'close_30d_ma', 'close_30d_std', 'daily_range', 'open_close_change',
-    # New Features
-    'RSI_14', 'MACD_12_26_9', 'MACDh_12_26_9', 'MACDs_12_26_9', # from pandas_ta
-    'ATRr_14', # from pandas_ta
-    'bb_pos',
-    'sentiment_delta', 'sentiment_7d_std',
-    'confluence', 'return_x_sentiment'
-]
 
-def train_baseline(data_path, model_save_path, window_size, max_depth, learning_rate, n_estimators, random_state):
-    # Ensure the save directory exists
-    os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
+def train_baseline(cfg: Config) -> dict:
+    """Train XGBoost baseline using parameters from config. Returns metrics."""
+    data_path = cfg.resolve(cfg.get("files.final_processed"))
+    model_save_path = cfg.resolve(cfg.get("files.xgboost_model"))
+    scaler_save_path = cfg.resolve(cfg.get("files.xgboost_scaler"))
+    split_save_path = cfg.resolve(cfg.get("files.xgboost_split"))
+    feature_columns = cfg.feature_columns
 
-    # Load data
+    # Hyperparams
+    window_size = cfg.get("xgboost.window_size")
+    max_depth = cfg.get("xgboost.max_depth")
+    learning_rate = cfg.get("xgboost.learning_rate")
+    n_estimators = cfg.get("xgboost.n_estimators")
+    random_state = cfg.get("xgboost.random_state")
+    train_ratio = cfg.get("split.xgboost_train_ratio", 0.8)
+
+    cfg.ensure_dirs()
+    model_save_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # --- Load data ---
     try:
         df = pd.read_csv(data_path)
     except FileNotFoundError:
-        print(f"Error: Data file not found at {data_path}")
-        return None
-    df['date'] = pd.to_datetime(df['date'])
-    df = df.sort_values('date')
+        print(f"Error: Data not found at {data_path}")
+        return {"error": "data_not_found"}
+    df["date"] = pd.to_datetime(df["date"])
+    df = df.sort_values("date")
 
-    # Create features from rolling windows
-    features = []
-    targets = []
-
-    if len(df) <= window_size:
-        print(f"Error: DataFrame has insufficient data (rows: {len(df)}) to create sequences with window size {window_size}.")
-        return None
-
+    # Create flattened window features
+    features, targets = [], []
     for i in range(window_size, len(df)):
-        window = df.iloc[i-window_size:i]
-        feature_row = window[FEATURE_COLUMNS].values.flatten()
-        features.append(feature_row)
-        targets.append(df.iloc[i]['label'])
+        window = df.iloc[i - window_size : i]
+        features.append(window[feature_columns].values.flatten())
+        targets.append(df.iloc[i]["label"])
 
     if not features:
-        print("Error: No features were created. Check window_size and data length.")
-        return None
+        print("Error: no features created")
+        return {"error": "no_features"}
 
     X = np.array(features)
-    y = np.array(targets)
-    y = y + 1 # Convert labels from -1,0,1 to 0,1,2 for XGBoost
+    y = np.array(targets) + 1  # -1,0,1 → 0,1,2
 
-    # Temporal split (80/20)
-    split_idx = int(0.8 * len(X))
+    # Temporal split
+    split_idx = int(train_ratio * len(X))
     X_train, X_test = X[:split_idx], X[split_idx:]
     y_train, y_test = y[:split_idx], y[split_idx:]
 
     if len(X_train) == 0 or len(X_test) == 0:
-        print("Error: Not enough data for train/test split.")
-        return None
+        print("Error: insufficient data for train/test split")
+        return {"error": "insufficient_data"}
 
-    # Scale features
+    # Scale (fit on train ONLY)
     scaler = StandardScaler()
-    X_train = scaler.fit_transform(X_train)
-    X_test = scaler.transform(X_test)
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
 
-    # Train XGBoost
+    # Save scaler (own copy per model)
+    joblib.dump(scaler, scaler_save_path)
+    print(f"Scaler saved: {scaler_save_path}")
+
+    # Save split indices for consistent evaluation
+    split_info = {
+        "train_ratio": train_ratio,
+        "n_total": len(X),
+        "n_train": split_idx,
+        "n_test": len(X) - split_idx,
+    }
+    with open(split_save_path, "w") as f:
+        json.dump(split_info, f)
+    print(f"Split info saved: {split_save_path}")
+
+    # Train
     model = xgb.XGBClassifier(
-        objective='multi:softprob',
-        num_class=len(np.unique(y)), # Dynamic num_class
+        objective="multi:softprob",
+        num_class=len(np.unique(y)),
         max_depth=max_depth,
         learning_rate=learning_rate,
         n_estimators=n_estimators,
         random_state=random_state,
-        use_label_encoder=False, # Suppress warning
-        eval_metric='mlogloss' # Moved eval_metric here
+        eval_metric="mlogloss",
     )
+    model.fit(X_train_scaled, y_train, eval_set=[(X_test_scaled, y_test)], verbose=False)
+    eval_results = model.evals_result()
 
-    # Fit the model with evaluation set to capture history
-    model.fit(X_train, y_train, eval_set=[(X_test, y_test)], verbose=False) # Removed eval_metric from here
-    eval_results = model.evals_result() # Get evaluation results
+    # Evaluate
+    y_pred = model.predict(X_test_scaled)
+    accuracy = accuracy_score(y_test, y_pred)
+    report = classification_report(y_test, y_pred, target_names=["SELL", "HOLD", "BUY"], output_dict=True)
 
-    # Save the trained model
-    try:
-        joblib.dump(model, model_save_path)
-        print(f"Model saved to {model_save_path}")
+    print(f"\nXGBoost Accuracy: {accuracy:.4f}")
+    print(classification_report(y_test, y_pred, target_names=["SELL", "HOLD", "BUY"]))
 
-        # Save training history
-        history_save_path = model_save_path.replace('.joblib', '_history.json')
-        # eval_results is already a dict suitable for JSON
-        with open(history_save_path, 'w') as f:
-            json.dump(eval_results, f, indent=4)
-        print(f"Training history saved to {history_save_path}")
+    # Save
+    joblib.dump(model, model_save_path)
+    print(f"Model saved: {model_save_path}")
 
-    except Exception as e:
-        print(f"Error saving model or history: {e}")
+    # Save history as JSON
+    history_path = model_save_path.with_suffix(".history.json")
+    with open(history_path, "w") as f:
+        json.dump(eval_results, f)
 
-    print("\nXGBoost Baseline Training finished.") # Updated message
-    # Evaluation on test set is now handled by evaluate_model.py
-    return model
+    return {"accuracy": accuracy, "model_path": str(model_save_path)}
+
+
+# ── CLI ────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Train XGBoost Baseline Model for Forex Prediction")
-    parser.add_argument('--data_path', type=str, default=DEFAULT_DATA_PATH, help='Path to the processed data CSV file')
-    parser.add_argument('--model_save_path', type=str, default=DEFAULT_MODEL_SAVE_PATH, help='Path to save the trained XGBoost model')
-    parser.add_argument('--window_size', type=int, default=DEFAULT_WINDOW_SIZE, help='Size of the lookback window for features')
-    parser.add_argument('--max_depth', type=int, default=DEFAULT_MAX_DEPTH, help='Maximum depth of a tree in XGBoost')
-    parser.add_argument('--learning_rate', type=float, default=DEFAULT_LEARNING_RATE, help='Learning rate for XGBoost')
-    parser.add_argument('--n_estimators', type=int, default=DEFAULT_N_ESTIMATORS, help='Number of boosting rounds (trees) for XGBoost')
-    parser.add_argument('--random_state', type=int, default=DEFAULT_RANDOM_STATE, help='Random state for reproducibility')
-
-    args = parser.parse_args()
-
-    train_baseline(
-        data_path=args.data_path,
-        model_save_path=args.model_save_path,
-        window_size=args.window_size,
-        max_depth=args.max_depth,
-        learning_rate=args.learning_rate,
-        n_estimators=args.n_estimators,
-        random_state=args.random_state
-    )
+    cfg = Config()
+    train_baseline(cfg)

@@ -1,270 +1,186 @@
 """
-Sentiment analyzer module for financial news sentiment scoring and data merging.
-
-This module processes cleaned GDELT news articles using FinBERT to calculate
-sentiment scores, aggregates them daily, and merges with forex price data
-to create the final dataset for machine learning.
+Sentiment analyzer — score financial news with FinBERT, aggregate daily, merge with price data.
 """
 
 import pandas as pd
 import numpy as np
 import torch
-import os
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from tqdm import tqdm
-import argparse
+from pathlib import Path
+from typing import Optional
 
-# Configuration constants
-PROCESSED_DATA_DIR = "../../../data/processed"
-RAW_DATA_DIR = "../../../data/raw"
-CLEANED_ARTICLES_FILE = "../../../data/processed/gdelt_articles_text_cleaned.csv"
-FOREX_PRICE_FILE = "../../../data/raw/eurusd_daily.csv"
-FINAL_SENTIMENT_FILE = "../../../data/processed/gdelt_eurusd_with_sentiment.csv"
+from src.config import Config
+
 FINBERT_MODEL_NAME = "ProsusAI/finbert"
 MAX_SEQUENCE_LENGTH = 512
 SENTIMENT_BATCH_SIZE = 16
 
-# Ensure output directory exists
-os.makedirs(PROCESSED_DATA_DIR, exist_ok=True)
 
-def calculate_finbert_sentiment_scores(texts, batch_size=SENTIMENT_BATCH_SIZE):
-    """
-    Calculate sentiment scores for a list of texts using FinBERT.
-
-    Args:
-        texts: List of text strings to analyze
-        batch_size (int): Batch size for processing
-
-    Returns:
-        List[float]: List of sentiment scores (positive - negative)
-    """
+def calculate_finbert_sentiment_scores(
+    texts: list[str],
+    batch_size: int = SENTIMENT_BATCH_SIZE,
+    model_name: str = FINBERT_MODEL_NAME,
+    max_length: int = MAX_SEQUENCE_LENGTH,
+) -> list[float]:
+    """Calculate sentiment scores (positive - negative) using FinBERT."""
     if not texts:
         print("No texts provided for sentiment analysis")
         return []
 
-    # Load FinBERT model and tokenizer
-    print(f"Loading FinBERT model: {FINBERT_MODEL_NAME}")
+    print(f"Loading FinBERT model: {model_name}")
     try:
-        tokenizer = AutoTokenizer.from_pretrained(FINBERT_MODEL_NAME)
-        model = AutoModelForSequenceClassification.from_pretrained(FINBERT_MODEL_NAME)
-        model.eval()  # Set to evaluation mode
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        model = AutoModelForSequenceClassification.from_pretrained(model_name)
+        model.eval()
         print("FinBERT model loaded successfully")
     except Exception as e:
         print(f"Failed to load FinBERT model: {e}")
         raise
 
     sentiments = []
-
-    print(f"Calculating sentiment scores for {len(texts)} texts")
-
     for i in tqdm(range(0, len(texts), batch_size), desc="Scoring sentiments"):
-        batch_texts = texts[i:i+batch_size]
+        batch_texts = texts[i:i + batch_size]
+        batch_texts = [str(t) if pd.notna(t) else "" for t in batch_texts]
 
-        # Ensure all texts are strings and handle NaN values
-        batch_texts = [str(text) if pd.notna(text) else "" for text in batch_texts]
-
-        # Tokenize batch
         inputs = tokenizer(
-            batch_texts,
-            padding=True,
-            truncation=True,
-            return_tensors="pt",
-            max_length=MAX_SEQUENCE_LENGTH
+            batch_texts, padding=True, truncation=True,
+            return_tensors="pt", max_length=max_length,
         )
-
-        # Get predictions
         with torch.no_grad():
             outputs = model(**inputs)
             predictions = torch.nn.functional.softmax(outputs.logits, dim=-1)
-
-        # FinBERT outputs: [positive, negative, neutral]
-        # Calculate sentiment score as: positive - negative
+        # FinBERT: [positive, negative, neutral] → score = positive - negative
         batch_sentiments = (predictions[:, 0] - predictions[:, 1]).cpu().tolist()
         sentiments.extend(batch_sentiments)
 
     print(f"Calculated {len(sentiments)} sentiment scores")
     return sentiments
 
-def load_and_validate_gdelt_data(file_path: str):
-    """
-    Load and validate GDELT news data.
 
-    Args:
-        file_path (str): Path to cleaned GDELT CSV file
-
-    Returns:
-        pd.DataFrame: Validated GDELT data
-    """
-    if not os.path.exists(file_path):
-        raise FileNotFoundError(f"GDELT data file not found at {file_path}")
+def load_and_validate_gdelt_data(file_path: str | Path) -> pd.DataFrame:
+    """Load and validate GDELT news data."""
+    file_path = Path(file_path)
+    if not file_path.exists():
+        raise FileNotFoundError(f"GDELT data not found: {file_path}")
 
     print(f"Loading GDELT data from {file_path}")
-    gdelt_df = pd.read_csv(file_path)
+    df = pd.read_csv(file_path)
 
-    # Validate required columns
-    required_columns = ['text', 'date']
-    missing_columns = [col for col in required_columns if col not in gdelt_df.columns]
-    if missing_columns:
-        raise ValueError(f"Missing required columns: {missing_columns}")
+    for col in ["text", "date"]:
+        if col not in df.columns:
+            raise ValueError(f"Missing required column: {col}")
 
-    # Clean and prepare data
-    gdelt_df = gdelt_df.dropna(subset=['text'])
-    gdelt_df['text'] = gdelt_df['text'].astype(str)
-    gdelt_df['date'] = pd.to_datetime(gdelt_df['date']).dt.date
+    df = df.dropna(subset=["text"])
+    df["text"] = df["text"].astype(str)
+    df["date"] = pd.to_datetime(df["date"]).dt.date
+    print(f"Loaded {len(df)} articles")
+    return df
 
-    print(f"Loaded and validated {len(gdelt_df)} GDELT articles")
-    return gdelt_df
 
-def aggregate_daily_sentiment(gdelt_df):
-    """
-    Aggregate sentiment scores by date.
+def aggregate_daily_sentiment(gdelt_df: pd.DataFrame) -> pd.DataFrame:
+    """Aggregate sentiment scores by date."""
+    if "sentiment_score" not in gdelt_df.columns or gdelt_df["sentiment_score"].isna().all():
+        print("No valid sentiment scores found")
+        return pd.DataFrame(columns=["date", "gdelt_sentiment"])
 
-    Args:
-        gdelt_df (pd.DataFrame): GDELT data with sentiment scores
+    daily = (
+        gdelt_df.groupby("date")["sentiment_score"]
+        .mean()
+        .reset_index()
+        .rename(columns={"sentiment_score": "gdelt_sentiment"})
+    )
+    daily["date"] = pd.to_datetime(daily["date"]).dt.date
+    print(f"Aggregated {len(daily)} days of sentiment")
+    return daily
 
-    Returns:
-        pd.DataFrame: Daily aggregated sentiment data
-    """
-    if 'sentiment_score' not in gdelt_df.columns or gdelt_df['sentiment_score'].isna().all():
-        print("No valid sentiment scores found for aggregation")
-        return pd.DataFrame(columns=['date', 'gdelt_sentiment'])
 
-    print("Aggregating sentiment scores by date")
-    daily_sentiment = (gdelt_df.groupby('date')['sentiment_score']
-                              .mean()
-                              .reset_index())
-    daily_sentiment.rename(columns={'sentiment_score': 'gdelt_sentiment'}, inplace=True)
-
-    # Ensure date is in correct format for merging
-    daily_sentiment['date'] = pd.to_datetime(daily_sentiment['date']).dt.date
-
-    print(f"Aggregated sentiment data for {len(daily_sentiment)} days")
-    return daily_sentiment
-
-def load_and_prepare_price_data(file_path: str):
-    """
-    Load and prepare forex price data.
-
-    Args:
-        file_path (str): Path to forex price CSV file
-
-    Returns:
-        pd.DataFrame: Prepared price data indexed by date
-    """
-    if not os.path.exists(file_path):
-        raise FileNotFoundError(f"Price data file not found at {file_path}")
+def load_and_prepare_price_data(file_path: str | Path) -> pd.DataFrame:
+    """Load and prepare forex OHLC price data."""
+    file_path = Path(file_path)
+    if not file_path.exists():
+        raise FileNotFoundError(f"Price data not found: {file_path}")
 
     print(f"Loading price data from {file_path}")
-    price_df = pd.read_csv(file_path)
+    df = pd.read_csv(file_path)
+    if df.empty:
+        raise ValueError(f"Price data is empty: {file_path}")
 
-    if price_df.empty:
-        raise ValueError(f"Price data file at {file_path} is empty")
+    df.rename(columns={df.columns[0]: "date_time"}, inplace=True)
+    df["date"] = pd.to_datetime(df["date_time"]).dt.date
+    df.set_index("date", inplace=True)
 
-    # Standardize date column name and format
-    price_df.rename(columns={price_df.columns[0]: 'date_time'}, inplace=True)
-    price_df['date'] = pd.to_datetime(price_df['date_time']).dt.date
-    price_df.set_index('date', inplace=True)
+    ohlc = [c for c in ["open", "high", "low", "close"] if c in df.columns]
+    print(f"Loaded {len(df)} days, columns: {ohlc}")
+    return df[ohlc]
 
-    # Keep only OHLC columns
-    ohlc_columns = ['open', 'high', 'low', 'close']
-    available_ohlc = [col for col in ohlc_columns if col in price_df.columns]
-    price_df = price_df[available_ohlc]
 
-    print(f"Loaded price data for {len(price_df)} days with columns: {available_ohlc}")
-    return price_df
-
-def merge_sentiment_and_price_data(price_df, sentiment_df):
-    """
-    Merge sentiment and price data on date.
-
-    Args:
-        price_df (pd.DataFrame): Price data indexed by date
-        sentiment_df (pd.DataFrame): Daily sentiment data
-
-    Returns:
-        pd.DataFrame: Merged dataset with price and sentiment data
-    """
-    print("Merging price data with sentiment scores")
-
+def merge_sentiment_and_price_data(
+    price_df: pd.DataFrame,
+    sentiment_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """Merge sentiment and price data on date."""
     if sentiment_df.empty:
-        print("Sentiment data is empty. Creating dataset with zero sentiment")
-        final_df = price_df.copy()
-        final_df['gdelt_sentiment'] = 0.0
+        print("Sentiment empty — using zero sentiment")
+        final = price_df.copy()
+        final["gdelt_sentiment"] = 0.0
     else:
-        # Set date as index for sentiment data
-        sentiment_df.set_index('date', inplace=True)
+        sentiment_df = sentiment_df.set_index("date")
+        final = price_df.join(sentiment_df, how="inner")
+        final["gdelt_sentiment"] = final["gdelt_sentiment"].fillna(0.0)
 
-        # Perform inner join to keep only overlapping dates
-        final_df = price_df.join(sentiment_df, how='inner')
+    print(f"Merged dataset: {len(final)} trading days")
+    return final
 
-        # Fill any remaining NaN sentiment values with 0
-        if 'gdelt_sentiment' in final_df.columns:
-            final_df['gdelt_sentiment'].fillna(0.0, inplace=True)
 
-    print(f"Merged dataset contains {len(final_df)} trading days")
+def run_sentiment_pipeline(
+    articles_path: str | Path,
+    price_path: str | Path,
+    output_path: str | Path,
+    finbert_model: str = FINBERT_MODEL_NAME,
+    batch_size: int = SENTIMENT_BATCH_SIZE,
+) -> pd.DataFrame:
+    """Run the full sentiment pipeline: load → score → aggregate → merge → save."""
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    gdelt_df = load_and_validate_gdelt_data(articles_path)
+
+    if not gdelt_df.empty:
+        scores = calculate_finbert_sentiment_scores(
+            gdelt_df["text"].tolist(), batch_size, finbert_model
+        )
+        gdelt_df["sentiment_score"] = scores
+    else:
+        gdelt_df["sentiment_score"] = np.nan
+
+    daily_sentiment = aggregate_daily_sentiment(gdelt_df)
+    price_df = load_and_prepare_price_data(price_path)
+    final_df = merge_sentiment_and_price_data(price_df, daily_sentiment)
+
+    final_df.reset_index(inplace=True)
+    final_df.to_csv(output_path, index=False)
+    print(f"Final dataset saved: {output_path} ({final_df.shape})")
     return final_df
 
-def save_final_dataset(df, output_path: str):
-    """
-    Save final merged dataset to CSV.
 
-    Args:
-        df (pd.DataFrame): Final dataset to save
-        output_path (str): Path to save the CSV file
-    """
-    if df.empty:
-        print("Final DataFrame is empty. No data to save.")
-        return
+# ── CLI ────────────────────────────────────────────────────────────────────
 
-    # Reset index to save date as column
-    df.reset_index(inplace=True)
-    df.to_csv(output_path, index=False)
+if __name__ == "__main__":
+    import argparse
+    cfg = Config()
+    parser = argparse.ArgumentParser(description="Run sentiment analysis pipeline")
+    parser.add_argument("--articles", default=str(cfg.resolve(cfg.get("files.cleaned_articles"))))
+    parser.add_argument("--forex-price", default=str(cfg.resolve(cfg.get("files.forex_daily"))))
+    parser.add_argument("--output", default=str(cfg.resolve(cfg.get("files.sentiment_merged"))))
+    parser.add_argument("--finbert-model", default=FINBERT_MODEL_NAME)
+    parser.add_argument("--batch-size", type=int, default=SENTIMENT_BATCH_SIZE)
+    args = parser.parse_args()
 
-    print(f"Final dataset saved to {output_path}")
-    print(f"Dataset shape: {df.shape}")
-    print(f"Columns: {list(df.columns)}")
-
-    # Display sentiment statistics if available
-    if 'gdelt_sentiment' in df.columns:
-        sentiment_stats = df['gdelt_sentiment'].describe()
-        non_zero_days = len(df[df['gdelt_sentiment'] != 0.0])
-
-        print("=== SENTIMENT STATISTICS ===")
-        print(f"Sentiment range: {sentiment_stats['min']:.4f} to {sentiment_stats['max']:.4f}")
-        print(f"Mean sentiment: {sentiment_stats['mean']:.4f}")
-        print(f"Days with non-zero sentiment: {non_zero_days}/{len(df)}")
-
-# ------------- run -------------
-if __name__ == '__main__':
-    print("Starting sentiment analysis pipeline")
-
-    try:
-        # Load and process GDELT data
-        gdelt_df = load_and_validate_gdelt_data(CLEANED_ARTICLES_FILE)
-
-        # Calculate sentiment scores
-        if not gdelt_df.empty and 'text' in gdelt_df.columns:
-            texts_to_score = gdelt_df['text'].tolist()
-            sentiment_scores = calculate_finbert_sentiment_scores(texts_to_score)
-            gdelt_df['sentiment_score'] = sentiment_scores
-        else:
-            print("No text data available for sentiment analysis")
-            gdelt_df['sentiment_score'] = np.nan
-
-        # Aggregate daily sentiment
-        daily_sentiment = aggregate_daily_sentiment(gdelt_df)
-
-        # Load price data
-        price_df = load_and_prepare_price_data(FOREX_PRICE_FILE)
-
-        # Merge sentiment and price data
-        final_df = merge_sentiment_and_price_data(price_df, daily_sentiment)
-
-        # Save final dataset
-        save_final_dataset(final_df, FINAL_SENTIMENT_FILE)
-
-        print("Sentiment analysis pipeline completed successfully")
-
-    except Exception as e:
-        print(f"Pipeline failed with error: {e}")
-        raise
+    run_sentiment_pipeline(
+        articles_path=args.articles,
+        price_path=args.forex_price,
+        output_path=args.output,
+        finbert_model=args.finbert_model,
+        batch_size=args.batch_size,
+    )

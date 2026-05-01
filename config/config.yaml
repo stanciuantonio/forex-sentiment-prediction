@@ -1,0 +1,88 @@
+# =============================================================================
+# forex-ml — Centralized Configuration
+# All paths, features, and hyperparameters in one place.
+# =============================================================================
+
+paths:
+  data_raw: "data/raw"
+  data_processed: "data/processed"
+  models: "models"
+  results: "results"
+  reports: "results/reports"
+  docs: "docs"
+
+files:
+  forex_daily: "data/raw/eurusd_daily.csv"
+  cleaned_articles: "data/processed/gdelt_articles_text_cleaned.csv"
+  sentiment_merged: "data/processed/gdelt_eurusd_with_sentiment.csv"
+  final_processed: "data/processed/eurusd_final_processed.csv"
+  lstm_model: "models/lstm_model.h5"
+  lstm_history: "models/lstm_history.json"
+  lstm_scaler: "models/scaler_lstm.pkl"
+  lstm_split: "models/split_lstm.json"
+  xgboost_model: "models/xgboost_baseline.joblib"
+  xgboost_scaler: "models/scaler_xgboost.pkl"
+  xgboost_split: "models/split_xgboost.json"
+  metrics: "results/metrics.json"
+
+data:
+  forex_pairs: ["EUR/USD"]
+  output_size: "full"   # Alpha Vantage: 'full' or 'compact'
+  label_threshold: 0.002   # 0.2% → BUY/SELL thresholds
+
+features:
+  # Core feature columns used by all models
+  columns:
+    - log_return
+    - gdelt_sentiment
+    - sentiment_7d_mean
+    - log_return_7d_mean
+    - log_return_7d_std
+    - close_30d_ma
+    - close_30d_std
+    - daily_range
+    - open_close_change
+    - RSI_14
+    - MACD_12_26_9
+    - MACDh_12_26_9
+    - MACDs_12_26_9
+    - ATRr_14
+    - bb_pos
+    - sentiment_delta
+    - sentiment_7d_std
+    - confluence
+    - return_x_sentiment
+
+split:
+  train_val_ratio: 0.85
+  test_ratio: 0.15
+  xgboost_train_ratio: 0.8
+
+lstm:
+  window_size: 30
+  hidden_size: 32
+  num_layers: 1
+  dropout: 0.3
+  epochs: 50
+  batch_size: 32
+  learning_rate: 0.0001
+  early_stopping_patience: 15
+  weight_decay: 0.0001
+  gradient_clip_value: 1.0
+
+xgboost:
+  window_size: 30
+  max_depth: 6
+  learning_rate: 0.1
+  n_estimators: 100
+  random_state: 42
+
+sentiment:
+  finbert_model: "ProsusAI/finbert"
+  max_sequence_length: 512
+  batch_size: 16
+
+api:
+  alphavantage_key_env: "ALPHAVANTAGE_API_KEY"
+  rate_limit_delay: 12   # seconds between Alpha Vantage calls
+  request_timeout: 30    # seconds
